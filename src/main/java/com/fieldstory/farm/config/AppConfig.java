@@ -1,4 +1,4 @@
-package com.example.fieldstoryfarm.config;
+package com.fieldstory.farm.config;
 
 /**
  * 应用全局配置。

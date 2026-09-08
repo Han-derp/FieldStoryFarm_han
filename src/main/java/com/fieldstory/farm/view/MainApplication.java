@@ -1,7 +1,7 @@
-package com.example.fieldstoryfarm.view;
+package com.fieldstory.farm.view;
 
-import com.example.fieldstoryfarm.config.AppConfig;
-import com.example.fieldstoryfarm.util.FxmlUtil;
+import com.fieldstory.farm.config.AppConfig;
+import com.fieldstory.farm.util.FxmlUtil;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.stage.Stage;

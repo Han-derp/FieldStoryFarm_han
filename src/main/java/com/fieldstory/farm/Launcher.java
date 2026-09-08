@@ -1,6 +1,6 @@
-package com.example.fieldstoryfarm;
+package com.fieldstory.farm;
 
-import com.example.fieldstoryfarm.view.MainApplication;
+import com.fieldstory.farm.view.MainApplication;
 import javafx.application.Application;
 
 /**

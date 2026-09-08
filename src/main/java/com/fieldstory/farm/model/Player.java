@@ -1,4 +1,4 @@
-package com.example.fieldstoryfarm.model;
+package com.fieldstory.farm.model;
 
 /**
  * 玩家模型（占位示例，后续按业务扩展）。
