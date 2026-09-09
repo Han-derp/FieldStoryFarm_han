@@ -62,7 +62,7 @@ V4.0》为唯一游戏规则事实源，其他需求、开发计划、测试说�
   ----------------------------------------------------------------------------------------------------------
   功能              描述                           依赖系统                   验收标准
   ----------------- ------------------------------ -------------------------- ------------------------------
-  土地经营          12×12地图，中心8×8种植区，FarmPlot支持开垦   Soil、EconomyService       EMPTY土地消耗5金币变为TILLED
+  土地经营          12×12地图，中心8×8种植区，FarmPlot支持开垦   Soil、EconomyService、LandService  EMPTY土地消耗5金币变为TILLED
 
   种子购买          购买三种基础作物种子           EconomyService             金币减少，种子库存增加
 
@@ -209,6 +209,7 @@ Persistence
 
 ### P0
 
+-   LandService
 -   GrowthService
 -   WateringService
 -   EconomyService
@@ -428,6 +429,13 @@ FarmScore = 147。
 | D04 | 土地格类型命名 | 统一叫 FarmPlot | 验收规范、本计划书2.1 |  | 规则文档十一节、验收规范十二节、README |
 | D05 | P0地图规格 | 12×12地图，中心8×8种植区；A建Farm模型、D画界面均须体现8×8种植区 | 验收规范 |  | 本计划书2.1 |
 | D06 | Git分支名 | 统一用 dev | 仓库实际分支 |  | 相关文档 |
+| D07 | P0开垦服务命名 | 新增 LandService（负责开垦、收获/铲除后的土地回退），加入 P0 Service 清单；与 P3 LandUnlockService 不冲突 | 计划书2.1；验收规范十五、十六 |  | 本计划书2.1、3.2 |
+| D08 | 播种消耗种子的跨模块接口 | EconomyService 增加 getSeedCount(CropType) 与 consumeSeed(CropType, int)；PlantingService 只调这两个方法，不直接访问 Player | 验收规范十八、三十四；规则文档六十四 |  | 验收规范三十四（可选） |
+| D09 | 收获后置 TILLED 的执行方 | C 调 A：BasicHarvestService 在“移除Crop→置TILLED”步骤调用 A 的 LandService.removeCropAndSetTilled(Soil)；P1 枯萎铲除复用同一方法 | 验收规范三十一、三十三；规则文档16.5；模块分工 |  | 无 |
+| D10 | 外围格 P0 占位策略 | Farm 维护 12×12 的 FarmPlot[][]；中心 8×8（0-based 坐标(2,2)~(9,9)）为 FARM_PLOT 且持有 Soil；外围统一 DECORATION_AREA 占位；SHOP/SHOWCASE 枚举保留，P1/P3 再定具体格；坐标约定 0-based | 验收规范十一、十二；规则文档10.1、十一；决策 D05 |  | 无 |
+| D11 | 浇水第6次行为与提示 | manualWaterCount≥5 后 canWater 直接返回 false（第5次仍有效，成长加成维持 +20% 封顶）；UI 提示建议“这株作物已经不需要浇水了” | 验收规范二十七、二十八；规则文档二十四 |  | 无（UI 文案为团队约定） |
+| D12 | CropType 数值来源 | P0 枚举硬编码（字段结构与 crop-config.json 对齐：cropType/baseGrowthDays/seedPrice/baseSellPrice）；配置加载时点后移，不晚于 P1 商店上线，由 E 提供 JsonConfigLoader 后切换 | 验收规范十七；决策 D01；脚手架第八节 |  | 决策记录；加载时点由 E 后续决策 |
+| D13 | model 实现类包位置 | 接口在包根，实现类以 Basic 前缀放 impl 子包（model.impl 与 service.impl 对称）；枚举不拆接口；E 注意 module-info 为 model.impl 增加对 Jackson 的 opens | 脚手架第七节；决策 D03 |  | 脚手架第七节或工程开发规范（待创建） |
 
 # 遗留问题
 
