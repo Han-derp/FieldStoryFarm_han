@@ -250,7 +250,7 @@ src/main/java/com/fieldstory/
 │   ├── WorldState.java
 │   ├── ActiveEvent.java
 │   ├── enums/
-│   │   ├── CellType.java
+│   │   ├── FarmPlot.java
 │   │   ├── SoilState.java
 │   │   ├── CropType.java
 │   │   ├── GrowthStage.java

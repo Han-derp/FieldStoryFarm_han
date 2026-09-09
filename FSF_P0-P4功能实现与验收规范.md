@@ -331,7 +331,7 @@ EventRate = 1.0
 中心：
 
 ```text
-8 × 8 FARM_PLOT
+8 × 8 FarmPlot
 ```
 
 外围：
@@ -346,12 +346,12 @@ P0外围区域只显示占位。
 
 ---
 
-# 十二、P0 CellType
+# 十二、P0 FarmPlot
 
 建立：
 
 ```java
-enum CellType {
+enum FarmPlot {
 
     FARM_PLOT,
     DECORATION_AREA,
@@ -364,7 +364,7 @@ enum CellType {
 P0实际可交互：
 
 ```text
-FARM_PLOT
+FarmPlot
 ```
 
 其余格子：
@@ -399,7 +399,7 @@ class Soil {
 仅：
 
 ```text
-FARM_PLOT
+FarmPlot
 ```
 
 拥有Soil。
@@ -471,7 +471,7 @@ PLANTED再次播种
 
 LOCKED开垦
 
-非FARM_PLOT进行种植
+非FarmPlot进行种植
 ```
 
 ---
@@ -3262,7 +3262,7 @@ Rank达到某个等级即可
 
 # 一百二十三、P3.4 Showcase
 
-展示台CellType：
+展示台FarmPlot：
 
 ```text
 SHOWCASE

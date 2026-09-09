@@ -405,7 +405,7 @@ TestClock
 正式版使用：
 
 ```java
-enum CellType {
+enum FarmPlot {
 
     FARM_PLOT,
 
@@ -421,7 +421,7 @@ enum CellType {
 只有：
 
 ```text
-FARM_PLOT
+FarmPlot
 ```
 
 才持有：
