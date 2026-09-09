@@ -5,12 +5,17 @@
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.layout.VBox?>
 
-<VBox alignment="CENTER" spacing="20.0" xmlns:fx="http://javafx.com/fxml"
-      fx:controller="com.fieldstory.farm.controller.MainController">
+<!--
+  主界面（场景组装，E 模块）。
+  注意：不在 FXML 声明 fx:controller，由 MainApplication 手动 setController 注入 GameManager。
+-->
+<VBox alignment="CENTER" spacing="20.0" xmlns:fx="http://javafx.com/fxml">
     <padding>
         <Insets bottom="20.0" left="20.0" right="20.0" top="20.0"/>
     </padding>
 
     <Label fx:id="welcomeText"/>
-    <Button text="开始游戏" onAction="#onStartButtonClick"/>
+    <Label fx:id="statusText"/>
+    <Button fx:id="startButton" text="开始游戏" onAction="#onStartButtonClick"/>
+    <Button fx:id="saveExitButton" text="保存并退出" onAction="#onSaveExitButtonClick"/>
 </VBox>

@@ -40,6 +40,7 @@ build/
 # 运行时数据
 data/
 *.db
+logs/
 
 # AI 临时目录
 .qoder-temp/
