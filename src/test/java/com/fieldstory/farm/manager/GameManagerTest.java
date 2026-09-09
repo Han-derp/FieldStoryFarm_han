@@ -1,80 +1,132 @@
 package com.fieldstory.farm.manager;
 
 import com.fieldstory.farm.model.GameState;
-import com.fieldstory.farm.service.InMemorySaveService;
+import com.fieldstory.farm.model.PlotState;
+import com.fieldstory.farm.persistence.JsonSaveService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
-import java.time.LocalDateTime;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * GameManager 生命周期测试（验收规范 §42、§44：新建→退出→重启恢复）。
- *
- * <p>对应验收标准：
- * （2）退出时保存金币、种子库存、GameClock 世界时间并记录退出世界时间；
- * （3）重启加载恢复到退出瞬间，不执行任何离线成长计算（本测试加载路径不触发任何成长逻辑）。
+ * P0 GameManager 测试：状态机切换、新游戏/读档、保存/退出生命周期。
  */
 class GameManagerTest {
 
-    private static final LocalDateTime EXIT_WORLD_TIME =
-            LocalDateTime.of(2026, 9, 9, 10, 30);
+    @TempDir
+    Path tempDir;
+
+    private JsonSaveService jsonService(String name) {
+        return new JsonSaveService(tempDir.resolve(name));
+    }
 
     @Test
-    void startWithoutSave_createsNewGameWith500Gold() {
-        InMemorySaveService saveService = new InMemorySaveService(false);
-        GameManager manager = new GameManager(saveService);
+    void getInstanceReturnsSameSingleton() {
+        assertSame(GameManager.getInstance(), GameManager.getInstance());
+        assertNotNull(GameManager.getInstance());
+    }
 
-        assertFalse(manager.hasSavedGame());
-        GameState state = manager.start();
+    @Test
+    void freshManagerStaysInMainMenuUntilStarted() {
+        GameManager gm = new GameManager(jsonService("a.json"));
+        assertEquals(GamePhase.MAIN_MENU, gm.currentPhase());
+        assertThrows(IllegalStateException.class, gm::currentState);
+    }
 
-        // 验收流程 ②：新建游戏金币 = 500（验收规范 §三十五）
-        assertNotNull(state);
+    @Test
+    void startWithoutSaveCreatesNewGameWithInitialGold() {
+        GameManager gm = new GameManager(jsonService("none.json"));
+        GameState state = gm.start();
+
+        assertEquals(GamePhase.PLAYING, gm.currentPhase());
         assertNotNull(state.getPlayer());
-        assertEquals(500, state.getPlayer().getGold());
-        // 新档土地应为空场（中心 8×8 EMPTY 由 A 模块 Farm 模型保证）
-        assertNotNull(state.getFarm());
-        // 新档尚无世界时间（时间由 D 模块 GameClock 启动后接管）
-        assertNull(state.getCurrentWorldTime());
+        assertEquals(GameManager.INITIAL_GOLD, state.getPlayer().getGold());
+        assertEquals(0L, state.getGameDay());
+        assertTrue(state.getPlots().isEmpty());
     }
 
     @Test
-    void saveNow_recordsExitWorldTimeIntoState() {
-        InMemorySaveService saveService = new InMemorySaveService(false);
-        GameManager manager = new GameManager(saveService);
-        manager.start();
-
-        // 模拟“操作完成自动保存 / 退出保存”入口
-        manager.saveAndExit(EXIT_WORLD_TIME);
-
-        GameState saved = saveService.lastSaved();
-        assertNotNull(saved);
-        // 退出世界时间被记录
-        assertTrue(saved.sameWorldTime(manager.currentState()));
-        assertEquals(EXIT_WORLD_TIME, manager.currentState().getCurrentWorldTime());
+    void staticNewGameProvidesInitialState() {
+        GameState state = GameManager.newGame();
+        assertEquals(GameManager.INITIAL_GOLD, state.getPlayer().getGold());
+        assertEquals(0L, state.getGameDay());
     }
 
     @Test
-    void restartWithSave_restoresExactlyToExitMoment() {
-        InMemorySaveService saveService = new InMemorySaveService(false);
-        GameManager first = new GameManager(saveService);
-        first.start();
-        first.saveAndExit(EXIT_WORLD_TIME);
-        GameState exitState = first.currentState();
+    void saveAndExitPersistsAndRestartRestores() {
+        Path file = tempDir.resolve("persist.json");
+        GameManager gm = new GameManager(new JsonSaveService(file));
+        GameState state = gm.start();
 
-        // 重启：同一存档，走“有存档 → load()”路径
-        GameManager second = new GameManager(saveService);
-        assertTrue(second.hasSavedGame());
-        GameState restored = second.start();
+        state.getPlayer().setGold(321);
+        state.setGameDay(9L);
+        PlotState plot = new PlotState();
+        plot.setRow(0);
+        plot.setColumn(0);
+        plot.setState("TILLED");
+        state.getPlots().add(plot);
 
-        assertNotNull(restored);
-        assertTrue(restored.samePlayerState(exitState));
-        assertTrue(restored.sameWorldTime(exitState));
-        // 恢复即退出瞬间状态：不做离线成长，世界时间不前进
-        assertEquals(EXIT_WORLD_TIME, restored.getCurrentWorldTime());
+        gm.saveAndExit();
+        assertEquals(GamePhase.EXITING, gm.currentPhase());
+
+        // 重启：新管理器 + 同一存档文件，应恢复到退出瞬间状态
+        GameManager restarted = new GameManager(new JsonSaveService(file));
+        assertEquals(GamePhase.MAIN_MENU, restarted.currentPhase());
+        assertTrue(restarted.hasSavedGame());
+
+        GameState loaded = restarted.start();
+        assertEquals(GamePhase.PLAYING, restarted.currentPhase());
+        assertEquals(321, loaded.getPlayer().getGold());
+        assertEquals(9L, loaded.getGameDay());
+        assertEquals(1, loaded.getPlots().size());
+        assertEquals("TILLED", loaded.getPlots().get(0).getState());
+    }
+
+    @Test
+    void corruptSaveFallsBackToNewGameOnStart() throws Exception {
+        Path file = tempDir.resolve("corrupt.json");
+        Files.writeString(file, "{{{corrupt", StandardCharsets.UTF_8);
+        GameManager gm = new GameManager(new JsonSaveService(file));
+
+        GameState state = gm.start();
+        assertEquals(GameManager.INITIAL_GOLD, state.getPlayer().getGold());
+        assertEquals(GamePhase.PLAYING, gm.currentPhase());
+    }
+
+    @Test
+    void saveNowBeforeStartThrows() {
+        GameManager gm = new GameManager(jsonService("x.json"));
+        assertThrows(IllegalStateException.class, gm::saveNow);
+    }
+
+    @Test
+    void pauseResumeFollowStateMachine() {
+        GameManager gm = new GameManager(jsonService("y.json"));
+        // 主菜单不可直接暂停
+        assertThrows(IllegalStateException.class, gm::pause);
+
+        gm.start();
+        gm.pause();
+        assertEquals(GamePhase.PAUSED, gm.currentPhase());
+        // 重复暂停非法
+        assertThrows(IllegalStateException.class, gm::pause);
+
+        gm.resume();
+        assertEquals(GamePhase.PLAYING, gm.currentPhase());
+        // 游戏中不可 resume
+        assertThrows(IllegalStateException.class, gm::resume);
+
+        // 暂停中退出也自动存档
+        gm.pause();
+        gm.saveAndExit();
+        assertEquals(GamePhase.EXITING, gm.currentPhase());
     }
 }

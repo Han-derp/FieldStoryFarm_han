@@ -3,29 +3,25 @@ package com.fieldstory.farm.service;
 import com.fieldstory.farm.model.GameState;
 
 /**
- * 存档服务接口（P0 Service 归属，验收规范 §3.2 / §四十）。
+ * 存档服务接口（计划书 §3.2 P0 Service；验收规范 §四十）。
  *
- * <p>接口约定（验收规范 §39-§42）：
- * <ul>
- *   <li>业务层与 Controller 一律通过本接口读写存档；</li>
- *   <li>Controller 不得知道 JSON 文件在哪里（§39）；</li>
- *   <li>P0 实现为 {@code JsonSaveService}，P1 替换为 {@code SqliteSaveService}，
- *       业务层调用方式不变（§40）；</li>
- *   <li>退出必须完整保存；重新进入恢复到退出瞬间，不做离线推进（§42，离线模拟属 P2）。</li>
- * </ul>
+ * <p>P0 由 {@code persistence.JsonSaveService}（JSON 临时存档）实现；
+ * P1 由 SqliteSaveService 替换，业务层调用方式不变。
+ *
+ * <p>Controller 不得感知存档文件位置（验收规范 §三十九）。
  */
 public interface SaveService {
 
-    /** 将全部游戏状态持久化。 */
+    /** 当前是否存在可读取的存档。 */
+    boolean hasSave();
+
+    /** 保存当前游戏状态到持久化层。 */
     void save(GameState state);
 
     /**
-     * 读取存档并恢复全部状态到退出瞬间。
+     * 读取存档并还原为游戏状态。
      *
-     * @return 恢复后的完整游戏状态；不存在有效存档时返回 {@code null}
+     * @return 存档对应的状态；不存在存档时返回 {@code null}
      */
     GameState load();
-
-    /** 是否存在有效存档。 */
-    boolean hasSave();
 }
