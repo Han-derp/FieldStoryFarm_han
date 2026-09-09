@@ -1,6 +1,7 @@
 module com.fieldstory.farm {
     requires javafx.controls;
     requires javafx.fxml;
+    requires com.fasterxml.jackson.databind;
 
     opens com.fieldstory.farm to javafx.fxml;
     exports com.fieldstory.farm;
