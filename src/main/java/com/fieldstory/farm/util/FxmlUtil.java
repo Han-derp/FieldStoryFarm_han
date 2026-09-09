@@ -1,4 +1,4 @@
-package com.example.fieldstoryfarm.util;
+package com.fieldstory.farm.util;
 
 import javafx.fxml.FXMLLoader;
 

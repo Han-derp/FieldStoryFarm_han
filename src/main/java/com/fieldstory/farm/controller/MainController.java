@@ -1,6 +1,6 @@
-package com.example.fieldstoryfarm.controller;
+package com.fieldstory.farm.controller;
 
-import com.example.fieldstoryfarm.model.Player;
+import com.fieldstory.farm.model.Player;
 import javafx.fxml.FXML;
 import javafx.scene.control.Label;
 

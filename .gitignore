@@ -34,3 +34,12 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+.rikki/
+
+# 运行时数据
+data/
+*.db
+
+# AI 临时目录
+.qoder-temp/
