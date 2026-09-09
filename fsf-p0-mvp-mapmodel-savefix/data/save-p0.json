@@ -1,0 +1,1137 @@
+{
+  "player" : {
+    "name" : "Player",
+    "gold" : 400,
+    "seedInventory" : {
+      "WHEAT" : 0,
+      "CORN" : 0,
+      "CARROT" : 3
+    }
+  },
+  "farm" : {
+    "tiles" : [ {
+      "row" : 0,
+      "column" : 0,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 0,
+      "column" : 1,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 0,
+      "column" : 2,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 0,
+      "column" : 3,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 0,
+      "column" : 4,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 0,
+      "column" : 5,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 0,
+      "column" : 6,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 0,
+      "column" : 7,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 0,
+      "column" : 8,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 0,
+      "column" : 9,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 0,
+      "column" : 10,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 0,
+      "column" : 11,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 1,
+      "column" : 0,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 1,
+      "column" : 1,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 1,
+      "column" : 2,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 1,
+      "column" : 3,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 1,
+      "column" : 4,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 1,
+      "column" : 5,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 1,
+      "column" : 6,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 1,
+      "column" : 7,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 1,
+      "column" : 8,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 1,
+      "column" : 9,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 1,
+      "column" : 10,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 1,
+      "column" : 11,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 2,
+      "column" : 0,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 2,
+      "column" : 1,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 2,
+      "column" : 2,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 1,
+        "row" : 0,
+        "column" : 0,
+        "state" : "PLANTED",
+        "crop" : {
+          "cropUuid" : "584b59d9-a91c-4a85-a0cc-92ea3f41f9a3",
+          "cropType" : "WHEAT",
+          "growthStage" : "GROWING",
+          "growthProgress" : 69.41666666666666,
+          "plantWorldTime" : [ 2026, 1, 1, 11, 0 ],
+          "lastGrowthWorldTime" : [ 2026, 1, 2, 19, 0 ],
+          "manualWaterCount" : 2,
+          "lastManualWaterGameDay" : [ 2026, 1, 2 ]
+        }
+      }
+    }, {
+      "row" : 2,
+      "column" : 3,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 2,
+        "row" : 0,
+        "column" : 1,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 2,
+      "column" : 4,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 3,
+        "row" : 0,
+        "column" : 2,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 2,
+      "column" : 5,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 4,
+        "row" : 0,
+        "column" : 3,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 2,
+      "column" : 6,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 5,
+        "row" : 0,
+        "column" : 4,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 2,
+      "column" : 7,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 6,
+        "row" : 0,
+        "column" : 5,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 2,
+      "column" : 8,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 7,
+        "row" : 0,
+        "column" : 6,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 2,
+      "column" : 9,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 8,
+        "row" : 0,
+        "column" : 7,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 2,
+      "column" : 10,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 2,
+      "column" : 11,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 3,
+      "column" : 0,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 3,
+      "column" : 1,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 3,
+      "column" : 2,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 9,
+        "row" : 1,
+        "column" : 0,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 3,
+      "column" : 3,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 10,
+        "row" : 1,
+        "column" : 1,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 3,
+      "column" : 4,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 11,
+        "row" : 1,
+        "column" : 2,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 3,
+      "column" : 5,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 12,
+        "row" : 1,
+        "column" : 3,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 3,
+      "column" : 6,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 13,
+        "row" : 1,
+        "column" : 4,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 3,
+      "column" : 7,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 14,
+        "row" : 1,
+        "column" : 5,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 3,
+      "column" : 8,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 15,
+        "row" : 1,
+        "column" : 6,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 3,
+      "column" : 9,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 16,
+        "row" : 1,
+        "column" : 7,
+        "state" : "PLANTED",
+        "crop" : {
+          "cropUuid" : "3300a31b-90b4-423f-87c6-d735fb918740",
+          "cropType" : "CARROT",
+          "growthStage" : "SPROUT",
+          "growthProgress" : 29.97916666666663,
+          "plantWorldTime" : [ 2026, 1, 1, 14, 24 ],
+          "lastGrowthWorldTime" : [ 2026, 1, 2, 19, 0 ],
+          "manualWaterCount" : 1,
+          "lastManualWaterGameDay" : [ 2026, 1, 2 ]
+        }
+      }
+    }, {
+      "row" : 3,
+      "column" : 10,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 3,
+      "column" : 11,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 4,
+      "column" : 0,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 4,
+      "column" : 1,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 4,
+      "column" : 2,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 17,
+        "row" : 2,
+        "column" : 0,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 4,
+      "column" : 3,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 18,
+        "row" : 2,
+        "column" : 1,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 4,
+      "column" : 4,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 19,
+        "row" : 2,
+        "column" : 2,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 4,
+      "column" : 5,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 20,
+        "row" : 2,
+        "column" : 3,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 4,
+      "column" : 6,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 21,
+        "row" : 2,
+        "column" : 4,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 4,
+      "column" : 7,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 22,
+        "row" : 2,
+        "column" : 5,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 4,
+      "column" : 8,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 23,
+        "row" : 2,
+        "column" : 6,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 4,
+      "column" : 9,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 24,
+        "row" : 2,
+        "column" : 7,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 4,
+      "column" : 10,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 4,
+      "column" : 11,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 5,
+      "column" : 0,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 5,
+      "column" : 1,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 5,
+      "column" : 2,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 25,
+        "row" : 3,
+        "column" : 0,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 5,
+      "column" : 3,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 26,
+        "row" : 3,
+        "column" : 1,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 5,
+      "column" : 4,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 27,
+        "row" : 3,
+        "column" : 2,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 5,
+      "column" : 5,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 28,
+        "row" : 3,
+        "column" : 3,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 5,
+      "column" : 6,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 29,
+        "row" : 3,
+        "column" : 4,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 5,
+      "column" : 7,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 30,
+        "row" : 3,
+        "column" : 5,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 5,
+      "column" : 8,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 31,
+        "row" : 3,
+        "column" : 6,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 5,
+      "column" : 9,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 32,
+        "row" : 3,
+        "column" : 7,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 5,
+      "column" : 10,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 5,
+      "column" : 11,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 6,
+      "column" : 0,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 6,
+      "column" : 1,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 6,
+      "column" : 2,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 33,
+        "row" : 4,
+        "column" : 0,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 6,
+      "column" : 3,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 34,
+        "row" : 4,
+        "column" : 1,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 6,
+      "column" : 4,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 35,
+        "row" : 4,
+        "column" : 2,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 6,
+      "column" : 5,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 36,
+        "row" : 4,
+        "column" : 3,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 6,
+      "column" : 6,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 37,
+        "row" : 4,
+        "column" : 4,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 6,
+      "column" : 7,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 38,
+        "row" : 4,
+        "column" : 5,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 6,
+      "column" : 8,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 39,
+        "row" : 4,
+        "column" : 6,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 6,
+      "column" : 9,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 40,
+        "row" : 4,
+        "column" : 7,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 6,
+      "column" : 10,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 6,
+      "column" : 11,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 7,
+      "column" : 0,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 7,
+      "column" : 1,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 7,
+      "column" : 2,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 41,
+        "row" : 5,
+        "column" : 0,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 7,
+      "column" : 3,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 42,
+        "row" : 5,
+        "column" : 1,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 7,
+      "column" : 4,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 43,
+        "row" : 5,
+        "column" : 2,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 7,
+      "column" : 5,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 44,
+        "row" : 5,
+        "column" : 3,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 7,
+      "column" : 6,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 45,
+        "row" : 5,
+        "column" : 4,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 7,
+      "column" : 7,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 46,
+        "row" : 5,
+        "column" : 5,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 7,
+      "column" : 8,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 47,
+        "row" : 5,
+        "column" : 6,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 7,
+      "column" : 9,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 48,
+        "row" : 5,
+        "column" : 7,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 7,
+      "column" : 10,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 7,
+      "column" : 11,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 8,
+      "column" : 0,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 8,
+      "column" : 1,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 8,
+      "column" : 2,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 49,
+        "row" : 6,
+        "column" : 0,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 8,
+      "column" : 3,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 50,
+        "row" : 6,
+        "column" : 1,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 8,
+      "column" : 4,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 51,
+        "row" : 6,
+        "column" : 2,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 8,
+      "column" : 5,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 52,
+        "row" : 6,
+        "column" : 3,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 8,
+      "column" : 6,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 53,
+        "row" : 6,
+        "column" : 4,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 8,
+      "column" : 7,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 54,
+        "row" : 6,
+        "column" : 5,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 8,
+      "column" : 8,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 55,
+        "row" : 6,
+        "column" : 6,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 8,
+      "column" : 9,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 56,
+        "row" : 6,
+        "column" : 7,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 8,
+      "column" : 10,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 8,
+      "column" : 11,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 9,
+      "column" : 0,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 9,
+      "column" : 1,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 9,
+      "column" : 2,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 57,
+        "row" : 7,
+        "column" : 0,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 9,
+      "column" : 3,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 58,
+        "row" : 7,
+        "column" : 1,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 9,
+      "column" : 4,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 59,
+        "row" : 7,
+        "column" : 2,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 9,
+      "column" : 5,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 60,
+        "row" : 7,
+        "column" : 3,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 9,
+      "column" : 6,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 61,
+        "row" : 7,
+        "column" : 4,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 9,
+      "column" : 7,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 62,
+        "row" : 7,
+        "column" : 5,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 9,
+      "column" : 8,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 63,
+        "row" : 7,
+        "column" : 6,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 9,
+      "column" : 9,
+      "plotType" : "FARM_PLOT",
+      "soil" : {
+        "id" : 64,
+        "row" : 7,
+        "column" : 7,
+        "state" : "EMPTY",
+        "crop" : null
+      }
+    }, {
+      "row" : 9,
+      "column" : 10,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 9,
+      "column" : 11,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 10,
+      "column" : 0,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 10,
+      "column" : 1,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 10,
+      "column" : 2,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 10,
+      "column" : 3,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 10,
+      "column" : 4,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 10,
+      "column" : 5,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 10,
+      "column" : 6,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 10,
+      "column" : 7,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 10,
+      "column" : 8,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 10,
+      "column" : 9,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 10,
+      "column" : 10,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 10,
+      "column" : 11,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 11,
+      "column" : 0,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 11,
+      "column" : 1,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 11,
+      "column" : 2,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 11,
+      "column" : 3,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 11,
+      "column" : 4,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 11,
+      "column" : 5,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 11,
+      "column" : 6,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 11,
+      "column" : 7,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 11,
+      "column" : 8,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 11,
+      "column" : 9,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 11,
+      "column" : 10,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    }, {
+      "row" : 11,
+      "column" : 11,
+      "plotType" : "DECORATION_AREA",
+      "soil" : null
+    } ]
+  },
+  "currentWorldTime" : [ 2026, 1, 2, 19, 0 ]
+}
