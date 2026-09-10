@@ -26,6 +26,10 @@ public enum CropType {
     /** 基础成长天数（游戏日），规则文档 §十三 */
     private final int baseGrowthDays;
 
+    /** 每日基础成长进度（派生字段）：100.0 / baseGrowthDays，构造时计算
+     * （A 模块设计文档 §8.3 引用 getBaseDailyProgress()） */
+    private final double baseDailyProgress;
+
     /** 种子价格（金币），规则文档 §十三 */
     private final int seedPrice;
 
@@ -41,6 +45,7 @@ public enum CropType {
         this.seedPrice = seedPrice;
         this.basePrice = basePrice;
         this.baseScore = baseScore;
+        this.baseDailyProgress = 100.0 / baseGrowthDays;
     }
 
     public String getDisplayName() {
@@ -49,6 +54,11 @@ public enum CropType {
 
     public int getBaseGrowthDays() {
         return baseGrowthDays;
+    }
+
+    /** 每日基础成长进度（100.0 / baseGrowthDays），P0 成长公式基数（验收规范 §二十四） */
+    public double getBaseDailyProgress() {
+        return baseDailyProgress;
     }
 
     public int getSeedPrice() {

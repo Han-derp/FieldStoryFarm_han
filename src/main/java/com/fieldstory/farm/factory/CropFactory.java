@@ -8,11 +8,9 @@ import com.fieldstory.farm.model.impl.BasicCrop;
 import java.util.UUID;
 
 /**
- * 作物工厂（脚手架 §七.6 factory 包职责：对象创建）。
- *
  * <p>创建一株全新作物的初始状态（验收规范 §二十 字段清单）：
  * 随机 cropUuid、growthStage=SEED、growthProgress=0、
- * manualWaterCount=0、lastManualWaterGameDay=0。
+ * manualWaterCount=0、lastManualWaterGameDay=-1（哨兵：从未浇水）。
  */
 public final class CropFactory {
 
@@ -35,7 +33,7 @@ public final class CropFactory {
         crop.setGrowthProgress(0.0);
         crop.setPlantWorldTime(plantWorldTime);
         crop.setManualWaterCount(0);
-        crop.setLastManualWaterGameDay(0);
+        crop.setLastManualWaterGameDay(-1);// -1 哨兵：从未浇水（游戏日从 0 起，不能用 0 表示"未浇"）
         return crop;
     }
 }

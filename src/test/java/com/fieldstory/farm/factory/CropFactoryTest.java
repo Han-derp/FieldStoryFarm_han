@@ -24,7 +24,7 @@ class CropFactoryTest {
         assertEquals(0.0, crop.getGrowthProgress());
         assertEquals(48L, crop.getPlantWorldTime());
         assertEquals(0, crop.getManualWaterCount());
-        assertEquals(0L, crop.getLastManualWaterGameDay());
+        assertEquals(-1L, crop.getLastManualWaterGameDay());
     }
 
     @Test

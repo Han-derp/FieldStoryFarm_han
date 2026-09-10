@@ -17,6 +17,7 @@ class CropTypeTest {
         assertEquals(10, CropType.WHEAT.getSeedPrice());
         assertEquals(50, CropType.WHEAT.getBasePrice());
         assertEquals(50, CropType.WHEAT.getBaseScore());
+        assertEquals(50.0, CropType.WHEAT.getBaseDailyProgress());
     }
 
     @Test
@@ -26,6 +27,7 @@ class CropTypeTest {
         assertEquals(15, CropType.CORN.getSeedPrice());
         assertEquals(70, CropType.CORN.getBasePrice());
         assertEquals(50, CropType.CORN.getBaseScore());
+        assertEquals(100.0 / 3, CropType.CORN.getBaseDailyProgress(), 1e-9);
     }
 
     @Test
@@ -35,5 +37,6 @@ class CropTypeTest {
         assertEquals(20, CropType.CARROT.getSeedPrice());
         assertEquals(60, CropType.CARROT.getBasePrice());
         assertEquals(55, CropType.CARROT.getBaseScore());
+        assertEquals(25.0, CropType.CARROT.getBaseDailyProgress());
     }
 }
