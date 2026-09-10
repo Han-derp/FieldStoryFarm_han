@@ -121,9 +121,9 @@ String cropUuid;               // 作物唯一标识（无作物时整棵 crop �
 String cropType;               // 作物类型名，如 "WHEAT"/"CORN"/"CARROT"
 String growthStage;            // 成长阶段名（对应未来 GrowthStage 枚举名）
 double growthProgress;         // 0.0~1.0
-String plantWorldTime;         // 播种时刻（ISO-8601）
+long   plantWorldTime;         // 播种时刻（游戏小时，决策 D14）
 int    manualWaterCount;
-String lastManualWaterGameDay;
+long   lastManualWaterGameDay; // 游戏日；-1 表示无浇水记录（决策 D14）
 // 均有 getter/setter；无作物判断用 hasCrop()（cropUuid != null）
 ```
 
@@ -363,11 +363,12 @@ String cropUuid;             // 无作物时整棵 crop 为 null（hasCrop() 判
 String cropType;             // "WHEAT"/"CORN"/"CARROT"...
 String growthStage;          // 对应未来 GrowthStage 枚举名
 double growthProgress;       // 0.0~1.0
-String plantWorldTime;       // 播种时刻 ISO-8601
+long   plantWorldTime;       // 播种时刻（游戏小时，决策 D14）
 int    manualWaterCount;
-String lastManualWaterGameDay;
+long   lastManualWaterGameDay; // 游戏日；-1 表示无浇水记录（决策 D14）
 ```
 - 要求：以上字段名是 JSON 键名，**不许改名/改含义**；A 适配层填值时逐一对齐。
+- 决策 D14：`plantWorldTime` 为 long 游戏小时（= GameClock.getGameDay()*24 + getGameHour()）；`lastManualWaterGameDay` 为 long 游戏日，**反序列化“无浇水记录”必须映射为 -1**（不得为 null/0）。
 - 反序列化细节：`plotId` 为空会自动补成 `"row,column"`；`crop` 缺失时按无作物处理。
 
 ---
