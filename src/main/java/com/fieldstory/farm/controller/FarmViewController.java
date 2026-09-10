@@ -1,0 +1,310 @@
+package com.fieldstory.farm.controller;
+
+import com.fieldstory.farm.manager.SceneManager;
+import com.fieldstory.farm.model.Crop;
+import com.fieldstory.farm.model.CropType;
+import com.fieldstory.farm.model.Farm;
+import com.fieldstory.farm.model.GrowthStage;
+import com.fieldstory.farm.model.Soil;
+import com.fieldstory.farm.service.LandService;
+import com.fieldstory.farm.service.PlantingResult;
+import com.fieldstory.farm.service.PlantingService;
+import com.fieldstory.farm.service.ReclaimResult;
+import com.fieldstory.farm.service.WateringResult;
+import com.fieldstory.farm.service.WateringService;
+import com.fieldstory.farm.view.FarmView;
+import javafx.scene.Node;
+import javafx.scene.control.Button;
+import javafx.scene.control.Tooltip;
+import javafx.scene.layout.StackPane;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 农场视图控制器（A 模块 P0 视图层；脚手架 §七.4 controller 职责：
+ * 接收用户操作 → 调用 Service → 刷新界面）。
+ *
+ * <p>点击 FARM_PLOT 格 → 选中并弹出操作菜单（UI规范 §11、§12），
+ * 按土壤状态决定按钮：EMPTY→开垦、TILLED→播种、PLANTED→浇水、MATURE→收获
+ * （{@link #actionsFor}）。业务一律走 A 的 Service：
+ * 开垦→LandService.reclaim、播种→PlantingService.plant、浇水→WateringService.water。
+ *
+ * <p>收获按钮 P0 保持禁用（C 模块 BasicHarvestService 未交付，
+ * 收获是 C 的职责，A 禁止实现收获逻辑，决策 D09）。
+ *
+ * <p>浇水 currentGameDay 暂用常量 {@link #P0_CURRENT_GAME_DAY}=0L，
+ * D 的 GameClock 接入后改为 getGameDay()（TODO）。
+ *
+ * <p>纯静态函数 {@link #actionsFor} / {@link #actionMessageFor} 只返回
+ * 枚举/字符串，不依赖 JavaFX 线程，可在无 GUI 线程下单测。
+ */
+public class FarmViewController {
+
+    /**
+     * P0 当前游戏日常量：浇水时传入（任务指定）。
+     * TODO D 的 GameClock 接入后改为 gameClock.getGameDay()。
+     */
+    private static final long P0_CURRENT_GAME_DAY = 0L;
+
+    /** 收获按钮禁用提示（决策 D09：收获是 C 模块职责，A 只提供 removeCropAndSetTilled 给 C 调） */
+    private static final String HARVEST_DISABLED_TIP = "待 C 模块收获服务接入";
+
+    /** 农场模型（12×12，中心 8×8 为 FARM_PLOT） */
+    private final Farm farm;
+
+    /** 开垦服务（A：EMPTY→TILLED） */
+    private final LandService landService;
+
+    /** 播种服务（A：TILLED→PLANTED，消耗 1 颗种子） */
+    private final PlantingService plantingService;
+
+    /** 浇水服务（A：三重校验 + 浇水计数） */
+    private final WateringService wateringService;
+
+    /** 农场画布视图 */
+    private final FarmView farmView;
+
+    /**
+     * 装配视图与三个 A 模块 Service。
+     *
+     * @param farm            农场模型
+     * @param landService     开垦服务
+     * @param plantingService 播种服务
+     * @param wateringService 浇水服务
+     */
+    public FarmViewController(Farm farm, LandService landService,
+                              PlantingService plantingService, WateringService wateringService) {
+        this.farm = farm;
+        this.landService = landService;
+        this.plantingService = plantingService;
+        this.wateringService = wateringService;
+        this.farmView = new FarmView(farm);
+        this.farmView.setOnTileSelected(this::onTileSelected);
+    }
+
+    /** 农场画布视图。 */
+    public FarmView getView() {
+        return farmView;
+    }
+
+    /**
+     * 挂载到场景中央：调用 E 的 SceneManager 完成组装
+     * （不修改 E 的 SceneManager/MainController/MainApplication 文件）。
+     */
+    public void mountToScene() {
+        SceneManager.getInstance().mount(SceneManager.Slot.CENTER, farmView);
+    }
+
+    // ==================== 纯静态函数（可无 GUI 线程单测） ====================
+
+    /**
+     * 纯函数：按土壤状态推导可执行动作。
+     *
+     * <p>EMPTY→开垦、TILLED→播种、PLANTED（未成熟）→浇水、
+     * PLANTED 且作物 MATURE→收获；装饰区（null）与 LOCKED 无动作
+     * （P0 不产生 LOCKED，验收规范 §十四）。
+     *
+     * @param soil 目标格土地（装饰区为 null）
+     * @return 动作列表（0~1 个）
+     */
+    public static List<FarmAction> actionsFor(Soil soil) {
+        if (soil == null) {
+            return List.of();
+        }
+        switch (soil.getState()) {
+            case EMPTY:
+                return List.of(FarmAction.RECLAIM);
+            case TILLED:
+                return List.of(FarmAction.PLANT);
+            case PLANTED:
+                Crop crop = soil.getCrop();
+                if (crop != null && crop.getGrowthStage() == GrowthStage.MATURE) {
+                    return List.of(FarmAction.HARVEST);
+                }
+                return List.of(FarmAction.WATER);
+            case LOCKED:
+            default:
+                return List.of();
+        }
+    }
+
+    /**
+     * 纯函数：开垦结果码 → 用户提示文案
+     * （设计文档 D13：结果枚举不挂文案，文案由 Controller 映射）。
+     */
+    public static String actionMessageFor(ReclaimResult result) {
+        switch (result) {
+            case SUCCESS:
+                return "开垦成功";
+            case NOT_EMPTY:
+                return "该格不是空地，无法开垦";
+            case NO_GOLD:
+                return "金币不足，开垦需要5金币";
+            default:
+                return "开垦失败";
+        }
+    }
+
+    /**
+     * 纯函数：播种结果码 → 用户提示文案
+     * （设计文档 D13：结果枚举不挂文案，文案由 Controller 映射）。
+     */
+    public static String actionMessageFor(PlantingResult result) {
+        switch (result) {
+            case SUCCESS:
+                return "播种成功";
+            case NOT_TILLED:
+                return "该格未开垦，无法播种";
+            case NO_SEED:
+                return "种子不足，无法播种";
+            default:
+                return "播种失败";
+        }
+    }
+
+    /**
+     * 纯函数：浇水结果码 → 用户提示文案
+     * （设计文档 D13；WATER_LIMIT_REACHED 文案为决策 D11 UI 建议：
+     * "这株作物已经不需要浇水了"）。
+     */
+    public static String actionMessageFor(WateringResult result) {
+        switch (result) {
+            case SUCCESS:
+                return "浇水成功";
+            case SEED_STAGE:
+                return "种子阶段还不能浇水";
+            case ALREADY_WATERED_TODAY:
+                return "今天已经浇过水了";
+            case WATER_LIMIT_REACHED:
+                return "这株作物已经不需要浇水了";
+            default:
+                return "浇水失败";
+        }
+    }
+
+    // ==================== 交互（UI规范 §11、§12） ====================
+
+    /** 点击格回调：选中 + 按状态弹菜单；装饰区点击收起菜单。 */
+    private void onTileSelected(Soil soil) {
+        if (soil == null) {
+            farmView.hideMenu();
+            farmView.selectTile(null);
+            return;
+        }
+        farmView.selectTile(soil);
+        List<FarmAction> actions = actionsFor(soil);
+        if (actions.isEmpty()) {
+            farmView.hideMenu();
+            return;
+        }
+        farmView.showMenuFor(soil, buildButtons(soil, actions));
+    }
+
+    /** 按动作生成菜单按钮；HARVEST 禁用并挂提示（决策 D09）。 */
+    private List<Node> buildButtons(Soil soil, List<FarmAction> actions) {
+        List<Node> buttons = new ArrayList<>();
+        for (FarmAction action : actions) {
+            Button button = farmView.createMenuButton(labelFor(action));
+            if (action == FarmAction.HARVEST) {
+                // 收获：P0 禁用（C 模块职责，D09）；禁用控件不响应鼠标，
+                // 包一层容器使 Tooltip 仍可显示
+                button.setDisable(true);
+                StackPane wrapper = new StackPane(button);
+                Tooltip.install(wrapper, new Tooltip(HARVEST_DISABLED_TIP));
+                buttons.add(wrapper);
+            } else {
+                button.setOnAction(event -> perform(soil, action));
+                buttons.add(button);
+            }
+        }
+        return buttons;
+    }
+
+    /** 动作按钮文案（UI规范 §12 操作菜单）。 */
+    private static String labelFor(FarmAction action) {
+        switch (action) {
+            case RECLAIM:
+                return "开垦";
+            case PLANT:
+                return "播种";
+            case WATER:
+                return "浇水";
+            case HARVEST:
+                return "收获";
+            default:
+                return "";
+        }
+    }
+
+    /** 执行动作；完成后刷新对应格渲染，失败经 Tooltip 提示（任务约束）。 */
+    private void perform(Soil soil, FarmAction action) {
+        switch (action) {
+            case RECLAIM:
+                reclaim(soil);
+                break;
+            case PLANT:
+                showSeedButtons(soil);
+                break;
+            case WATER:
+                water(soil);
+                break;
+            case HARVEST:
+            default:
+                // 收获：P0 禁用，A 禁止实现收获逻辑（决策 D09，C 模块职责）
+                break;
+        }
+    }
+
+    /** 开垦：EMPTY→TILLED（验收规范 §十五）。 */
+    private void reclaim(Soil soil) {
+        ReclaimResult result = landService.reclaim(soil);
+        if (result == ReclaimResult.SUCCESS) {
+            farmView.hideMenu();
+            farmView.refreshTile(soil);
+        } else {
+            farmView.showTip(soil, actionMessageFor(result));
+        }
+    }
+
+    /**
+     * 播种入口：弹出种子选择按钮（小麦10金/玉米15金/胡萝卜20金，
+     * 种子价取自 CropType.getSeedPrice，单一数据源 D12，不硬编码）。
+     */
+    private void showSeedButtons(Soil soil) {
+        List<Node> buttons = new ArrayList<>();
+        for (CropType type : CropType.values()) {
+            Button button = farmView.createMenuButton(
+                    type.getDisplayName() + " " + type.getSeedPrice() + "金");
+            button.setOnAction(event -> plant(soil, type));
+            buttons.add(button);
+        }
+        farmView.showMenuFor(soil, buttons);
+    }
+
+    /** 播种：TILLED→PLANTED，消耗 1 颗种子（验收规范 §十八、§十九）。 */
+    private void plant(Soil soil, CropType type) {
+        PlantingResult result = plantingService.plant(soil, type);
+        if (result == PlantingResult.SUCCESS) {
+            farmView.hideMenu();
+            farmView.refreshTile(soil);
+        } else {
+            farmView.showTip(soil, actionMessageFor(result));
+        }
+    }
+
+    /** 浇水：三重校验后计数（验收规范 §二十六、§二十七、§二十八）。 */
+    private void water(Soil soil) {
+        Crop crop = soil.getCrop();
+        if (crop == null) {
+            return;
+        }
+        WateringResult result = wateringService.water(crop, P0_CURRENT_GAME_DAY);
+        if (result == WateringResult.SUCCESS) {
+            farmView.hideMenu();
+            farmView.refreshTile(soil);
+        } else {
+            farmView.showTip(soil, actionMessageFor(result));
+        }
+    }
+}
