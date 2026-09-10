@@ -2,6 +2,7 @@ package com.fieldstory.farm.persistence;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.GameState;
 import com.fieldstory.farm.model.Player;
 import com.fieldstory.farm.model.PlotState;
@@ -30,6 +31,12 @@ class JsonSaveServiceTest {
         return new JsonSaveService(tempDir.resolve(name));
     }
 
+    /** 读取唯一种子库存中的数量（缺失作物视为 0）。 */
+    private static int seedCount(Player player, CropType type) {
+        Integer count = player.getSeedInventory().get(type);
+        return count == null ? 0 : count;
+    }
+
     @Test
     void loadReturnsNullWhenNoSaveExists() {
         JsonSaveService svc = service("missing/save.json");
@@ -40,7 +47,9 @@ class JsonSaveServiceTest {
     @Test
     void saveCreatesFileWithVersionAndSchema() throws Exception {
         JsonSaveService svc = service("save.json");
-        GameState state = new GameState(new Player("农夫A", 500), 3L);
+        Player player = new Player("农夫A", 500);
+        player.getSeedInventory().put(CropType.WHEAT, 4);
+        GameState state = new GameState(player, 3L);
         svc.save(state);
 
         Path file = tempDir.resolve("save.json");
@@ -48,11 +57,13 @@ class JsonSaveServiceTest {
         assertTrue(Files.isRegularFile(file));
 
         JsonNode root = new ObjectMapper().readTree(Files.readString(file, StandardCharsets.UTF_8));
-        assertEquals(1, root.path("version").asInt());
+        assertEquals(2, root.path("version").asInt());
         assertEquals("P0-json", root.path("schema").asText());
         assertEquals(3L, root.path("gameDay").asLong());
         assertEquals("农夫A", root.path("player").path("name").asText());
         assertEquals(500, root.path("player").path("gold").asInt());
+        // 种子库存归属 Player（B §6.2），落盘在 player 节点下（验收 §四十一）
+        assertEquals(4, root.path("player").path("seedInventory").path("WHEAT").asInt());
     }
 
     @Test
@@ -67,7 +78,10 @@ class JsonSaveServiceTest {
     void roundTripPreservesPlayerDayUnlockedAndPlots() throws Exception {
         JsonSaveService svc = service("roundtrip.json");
 
-        GameState state = new GameState(new Player("测试农夫", 888), 12L);
+        Player player = new Player("测试农夫", 888);
+        player.getSeedInventory().put(CropType.WHEAT, 4);
+        player.getSeedInventory().put(CropType.CORN, 2);
+        GameState state = new GameState(player, 12L);
         state.setCurrentWorldTime("2026-09-09T08:30:00");
         state.getUnlocked().add("shop");
         state.getUnlocked().add("land-2x2");
@@ -96,9 +110,12 @@ class JsonSaveServiceTest {
         svc.save(state);
         GameState loaded = svc.load();
 
-        // Player
+        // Player 经济与种子库存
         assertEquals("测试农夫", loaded.getPlayer().getName());
         assertEquals(888, loaded.getPlayer().getGold());
+        assertEquals(4, seedCount(loaded.getPlayer(), CropType.WHEAT));
+        assertEquals(2, seedCount(loaded.getPlayer(), CropType.CORN));
+        assertEquals(0, seedCount(loaded.getPlayer(), CropType.CARROT));
         // 天数、世界时间与已解锁
         assertEquals(12L, loaded.getGameDay());
         assertEquals("2026-09-09T08:30:00", loaded.getCurrentWorldTime());
@@ -150,6 +167,80 @@ class JsonSaveServiceTest {
     }
 
     @Test
+    void seedInventoryRoundTripPreservesCounts() throws Exception {
+        JsonSaveService svc = service("seeds.json");
+        Player player = new Player("农夫", 500);
+        player.getSeedInventory().put(CropType.WHEAT, 5);
+        player.getSeedInventory().put(CropType.CARROT, 1);
+        GameState state = new GameState(player, 0L);
+
+        svc.save(state);
+        GameState loaded = svc.load();
+
+        assertEquals(5, seedCount(loaded.getPlayer(), CropType.WHEAT));
+        assertEquals(1, seedCount(loaded.getPlayer(), CropType.CARROT));
+        assertEquals(0, seedCount(loaded.getPlayer(), CropType.CORN));
+    }
+
+    @Test
+    void playerWithoutSeedsRoundTripsAsEmptyInventory() throws Exception {
+        JsonSaveService svc = service("noseeds.json");
+        GameState state = new GameState(new Player("农夫", 500), 0L);
+
+        svc.save(state);
+        GameState loaded = svc.load();
+
+        assertTrue(loaded.getPlayer().getSeedInventory().isEmpty());
+    }
+
+    @Test
+    void loadLegacyVersion1WithoutSeedInventoryStillLoads() throws Exception {
+        // v1 旧档没有 seedInventory 字段：应兼容读入，种子库存按空处理
+        Path file = tempDir.resolve("legacy-v1.json");
+        Files.writeString(file,
+                "{\"version\":1,\"schema\":\"P0-json\",\"gameDay\":7,"
+                        + "\"player\":{\"name\":\"老档\",\"gold\":250},\"plots\":[]}",
+                StandardCharsets.UTF_8);
+        JsonSaveService svc = new JsonSaveService(file);
+
+        GameState loaded = svc.load();
+        assertEquals(7L, loaded.getGameDay());
+        assertEquals(250, loaded.getPlayer().getGold());
+        assertTrue(loaded.getPlayer().getSeedInventory().isEmpty());
+    }
+
+    @Test
+    void loadEarlyV2WithRootLevelSeedInventoryFallsBack() throws Exception {
+        // 早期 v2 曾把 seedInventory 放在根节点：读入时应回退兼容
+        Path file = tempDir.resolve("early-v2.json");
+        Files.writeString(file,
+                "{\"version\":2,\"schema\":\"P0-json\",\"gameDay\":1,"
+                        + "\"player\":{\"name\":\"旧版\",\"gold\":500},"
+                        + "\"seedInventory\":{\"CORN\":9},\"plots\":[]}",
+                StandardCharsets.UTF_8);
+        JsonSaveService svc = new JsonSaveService(file);
+
+        GameState loaded = svc.load();
+        assertEquals(9, seedCount(loaded.getPlayer(), CropType.CORN));
+    }
+
+    @Test
+    void loadSkipsUnknownCropTypeName() throws Exception {
+        // 未来新增作物名：旧程序应跳过而不崩溃，已知作物正常读入
+        Path file = tempDir.resolve("future-crop.json");
+        Files.writeString(file,
+                "{\"version\":2,\"schema\":\"P0-json\",\"gameDay\":0,"
+                        + "\"player\":{\"name\":\"农夫\",\"gold\":500,"
+                        + "\"seedInventory\":{\"WHEAT\":2,\"PUMPKIN\":99}},\"plots\":[]}",
+                StandardCharsets.UTF_8);
+        JsonSaveService svc = new JsonSaveService(file);
+
+        GameState loaded = svc.load();
+        assertEquals(2, seedCount(loaded.getPlayer(), CropType.WHEAT));
+        assertEquals(1, loaded.getPlayer().getSeedInventory().size());
+    }
+
+    @Test
     void loadCorruptFileThrows() throws Exception {
         Path file = tempDir.resolve("corrupt.json");
         Files.writeString(file, "not-json{{{", StandardCharsets.UTF_8);
@@ -161,7 +252,9 @@ class JsonSaveServiceTest {
     @Test
     void loadUnsupportedVersionThrows() throws Exception {
         Path file = tempDir.resolve("future.json");
-        Files.writeString(file, "{\"version\":2,\"schema\":\"P0-json\",\"player\":null}", StandardCharsets.UTF_8);
+        Files.writeString(file,
+                "{\"version\":3,\"schema\":\"P0-json\",\"player\":null}",
+                StandardCharsets.UTF_8);
         JsonSaveService svc = new JsonSaveService(file);
         IllegalStateException ex = assertThrows(IllegalStateException.class, svc::load);
         assertTrue(ex.getMessage().contains("版本"));

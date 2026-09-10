@@ -1,0 +1,58 @@
+@startuml e-save-state-machine
+title E 模块 · 存档文件状态机（JsonSaveService · data/save.json）
+
+hide empty description
+skinparam shadowing false
+skinparam state {
+  BackgroundColor White
+  BorderColor #333333
+  ArrowColor #333333
+  FontSize 13
+}
+
+[*] --> NOT_EXIST
+
+NOT_EXIST --> V2_CURRENT : save(state)\n[自动建 data/ 目录，UTF-8 写盘]
+NOT_EXIST --> NOT_EXIST : load() → null\n[不抛异常]
+
+V2_CURRENT --> V2_CURRENT : save(state) 覆写 ／ load() 只读
+
+V1_LEGACY --> V2_CURRENT : save(state)\n[读旧写新，落盘为 version=2]
+V1_LEGACY --> V1_LEGACY : load()\n[兼容读入，player.seedInventory 视为空库]
+
+CORRUPT --> V2_CURRENT : save(state)\n[覆写修复]
+INCOMPATIBLE --> V2_CURRENT : save(state)\n[覆写修复]
+
+V2_CURRENT --> CORRUPT : 文件被外部破坏 ／ IO 失败
+V2_CURRENT --> INCOMPATIBLE : version 小于 1 ／ 大于 2 ／ 缺失
+
+state V2_CURRENT : version = 2\nschema = P0-json
+
+note right of CORRUPT
+  load() 抛 IllegalStateException
+  "存档文件损坏或无法读取"
+  GameManager 捕获后降级为新档，
+  且不覆写坏档（下次 save 才覆盖）
+end note
+
+note right of INCOMPATIBLE
+  load() 抛 IllegalStateException
+  "存档版本不兼容: 支持 version=1~2，实际 version=X"
+  常量：SAVE_VERSION = 2
+        MIN_SUPPORTED_VERSION = 1
+end note
+
+note bottom of V1_LEGACY
+  v1 旧档无 seedInventory 字段
+  → 兼容读入并按空库处理
+  （本次修复：补齐种子库存字段并将版本递增到 2）
+end note
+
+note bottom of V2_CURRENT
+  v2 正式位置：player.seedInventory（键 = CropType 名，值 = 数量）
+  读取顺序：player.seedInventory
+        → 根节点 seedInventory（兼容早期 v2 快照）
+        → 空库（都存在则跳过未知作物名）
+  写入：仅写 player.seedInventory
+end note
+@enduml

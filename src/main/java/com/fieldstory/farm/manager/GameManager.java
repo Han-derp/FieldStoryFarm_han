@@ -4,6 +4,7 @@ import com.fieldstory.farm.model.GameState;
 import com.fieldstory.farm.model.Player;
 import com.fieldstory.farm.persistence.JsonSaveService;
 import com.fieldstory.farm.service.SaveService;
+import com.fieldstory.farm.util.GameConstants;
 
 import java.util.Objects;
 
@@ -24,8 +25,11 @@ import java.util.Objects;
  */
 public class GameManager {
 
-    /** 新游戏初始金币（计划书 §5 核心数值：初始金币 500） */
-    public static final int INITIAL_GOLD = 500;
+    /**
+     * 新游戏初始金币（B 模块 §9：不得再写 500，统一取自 {@link GameConstants#INITIAL_GOLD}）。
+     * 保留为兼容别名，新代码请直接引用 {@link GameConstants#INITIAL_GOLD}。
+     */
+    public static final int INITIAL_GOLD = GameConstants.INITIAL_GOLD;
 
     private static final String DEFAULT_PLAYER_NAME = "农夫";
 
