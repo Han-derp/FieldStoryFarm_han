@@ -1,53 +1,22 @@
 package com.fieldstory.farm.model;
 
+import java.util.List;
+
 /**
- * 农田地图接口（A 模块 P0 交付物，D 模块仅引用其类型）。
+ * 农场地图模型接口（规则文档 §10.1；验收规范 §十一）。
  *
- * <p>依据《A模块 P0 接口与类设计文档》§7.1。实现类 {@code BasicFarm} 由 A 模块提供。
- *
- * <p><b>归属说明</b>：本接口归 A 模块所有。D 模块的 {@code FarmGameModel} 按团队裁决 ①
- * 统一以本接口作为土地字段类型，故此处先行声明以解除编译依赖；A 模块交付后应以其版本为准。
+ * <p>12×12 共 144 格：中心 8×8（全局 0-based 行 2~9、列 2~9）为 FARM_PLOT，
+ * 每格持有一个 Soil（初始 EMPTY）；外围 2 格宽统一为 DECORATION_AREA；
+ * SHOP / SHOWCASE 在 P0 布局中不出现。
  */
 public interface Farm {
 
-    /**
-     * 获取地图宽度（列数）。
-     *
-     * @return 宽度，P0 为 12
-     */
-    int getWidth();
+    /** 查询任意格的地图格类型（全局 0-based 坐标） */
+    FarmPlot getPlotType(int row, int column);
 
-    /**
-     * 获取地图高度（行数）。
-     *
-     * @return 高度，P0 为 12
-     */
-    int getHeight();
+    /** 查询任意格的 Soil：非 FARM_PLOT 格返回 null（规则文档 §十一） */
+    Soil getSoil(int row, int column);
 
-    /**
-     * 获取指定坐标的地块类型。
-     *
-     * @param row 行（0-based）
-     * @param col 列（0-based）
-     * @return 地块类型
-     */
-    FarmPlot getPlot(int row, int col);
-
-    /**
-     * 获取指定坐标的土壤；非 FARM_PLOT 返回 null。
-     *
-     * @param row 行（0-based）
-     * @param col 列（0-based）
-     * @return 土壤，非种植格返回 null
-     */
-    Soil getSoil(int row, int col);
-
-    /**
-     * 判断指定坐标是否为种植格。
-     *
-     * @param row 行（0-based）
-     * @param col 列（0-based）
-     * @return 是种植格返回 true
-     */
-    boolean isFarmPlot(int row, int col);
+    /** 遍历农场全部 Soil（共 64 块，对应中心 8×8 种植区） */
+    List<Soil> getSoils();
 }

@@ -1,114 +1,45 @@
 package com.fieldstory.farm.model;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * 作物接口（A 模块 P0 交付物，D 模块仅引用其类型）。
+ * 作物模型接口（验收规范 §二十；规则文档 §十七、§二十五、§六十九）。
  *
- * <p>依据《A模块 P0 接口与类设计文档》§7.3。实现类 {@code BasicCrop} 由 A 模块提供。
- *
- * <p>设计原则：Model 只描述"对象当前状态"，全部 setter 由 Service 或 E 模块切换使用，
- * 不含任何业务判断。
+ * <p>只保存状态，不含任何计算与业务规则（脚手架 §七.1 Model 原则）。
+ * 全部 setter 供 Service 与存档反序列化使用。
  */
 public interface Crop {
 
-    /**
-     * 获取作物唯一标识。
-     *
-     * @return 作物 UUID
-     */
+    /** 作物唯一标识（规则文档 §六十九） */
     UUID getCropUuid();
 
-    /**
-     * 设置作物唯一标识。
-     *
-     * @param cropUuid 作物 UUID
-     */
     void setCropUuid(UUID cropUuid);
 
-    /**
-     * 获取作物类型。
-     *
-     * @return 作物类型
-     */
     CropType getCropType();
 
-    /**
-     * 设置作物类型。
-     *
-     * @param cropType 作物类型
-     */
     void setCropType(CropType cropType);
 
-    /**
-     * 获取生长阶段。
-     *
-     * @return 生长阶段
-     */
     GrowthStage getGrowthStage();
 
-    /**
-     * 设置生长阶段。
-     *
-     * @param growthStage 生长阶段
-     */
     void setGrowthStage(GrowthStage growthStage);
 
-    /**
-     * 获取生长进度（0.0 ~ 100.0）。
-     *
-     * @return 生长进度
-     */
+    /** 成长进度，内部口径 0~100（规则文档 §十七） */
     double getGrowthProgress();
 
-    /**
-     * 设置生长进度。
-     *
-     * @param growthProgress 生长进度
-     */
     void setGrowthProgress(double growthProgress);
 
-    /**
-     * 获取种植时的世界时间。
-     *
-     * @return 种植世界时间
-     */
-    LocalDateTime getPlantWorldTime();
+    /** 播种时刻世界时间（游戏小时，来自 GameClock.getWorldTime） */
+    long getPlantWorldTime();
 
-    /**
-     * 设置种植时的世界时间。
-     *
-     * @param plantWorldTime 种植世界时间
-     */
-    void setPlantWorldTime(LocalDateTime plantWorldTime);
+    void setPlantWorldTime(long plantWorldTime);
 
-    /**
-     * 获取手动浇水次数（0 ~ 5）。
-     *
-     * @return 手动浇水次数
-     */
+    /** 主动浇水累计次数（规则文档 §二十四、§二十五） */
     int getManualWaterCount();
 
-    /**
-     * 设置手动浇水次数。
-     *
-     * @param manualWaterCount 手动浇水次数
-     */
     void setManualWaterCount(int manualWaterCount);
 
-    /**
-     * 获取最近一次手动浇水的游戏日。
-     *
-     * @return 最近手动浇水游戏日
-     */
-    LocalDate getLastManualWaterGameDay();
+    /** 最近一次主动浇水的游戏日（游戏日，来自 GameClock.getGameDay） */
+    long getLastManualWaterGameDay();
 
-    /**
-     * 设置最近一次手动浇水的游戏日。
-     *
-     * @param lastManualWaterGameDay 最近手动浇水游戏日
-     */
-    void setLastManualWaterGameDay(LocalDate lastManualWaterGameDay);
+    void setLastManualWaterGameDay(long lastManualWaterGameDay);
 }

@@ -1,61 +1,28 @@
 package com.fieldstory.farm.model;
 
 /**
- * 土壤接口（A 模块 P0 交付物，D 模块仅引用其类型）。
+ * 土地模型接口（验收规范 §十三；规则文档 §十一 仅 FARM_PLOT 持有 Soil）。
  *
- * <p>依据《A模块 P0 接口与类设计文档》§7.2。实现类 {@code BasicSoil} 由 A 模块提供。
- *
- * <p>设计原则：Model 只描述"对象当前状态"，全部 setter 由 Service 或 E 模块切换使用，
- * 不含任何业务判断。
+ * <p>只保存状态，不含任何计算与业务规则。
+ * 坐标一律为全局地图 0-based 坐标。
  */
 public interface Soil {
 
-    /**
-     * 获取土壤唯一标识。
-     *
-     * @return 土壤 id
-     */
+    /** 土地唯一 id：由构造按 行*12+列 生成（行列为全局坐标） */
     long getId();
 
-    /**
-     * 获取所在行（0-based）。
-     *
-     * @return 行
-     */
+    /** 行坐标（全局地图坐标，0-based） */
     int getRow();
 
-    /**
-     * 获取所在列（0-based）。
-     *
-     * @return 列
-     */
+    /** 列坐标（全局地图坐标，0-based） */
     int getColumn();
 
-    /**
-     * 获取土壤状态。
-     *
-     * @return 土壤状态
-     */
     SoilState getState();
 
-    /**
-     * 设置土壤状态。
-     *
-     * @param state 土壤状态
-     */
     void setState(SoilState state);
 
-    /**
-     * 获取作物；非 PLANTED 时返回 null。
-     *
-     * @return 作物，无作物返回 null
-     */
+    /** 该格作物：未播种时为 null（验收规范 §十三） */
     Crop getCrop();
 
-    /**
-     * 设置作物。
-     *
-     * @param crop 作物
-     */
     void setCrop(Crop crop);
 }
