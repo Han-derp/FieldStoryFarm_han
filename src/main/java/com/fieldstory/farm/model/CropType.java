@@ -69,6 +69,13 @@ public enum CropType {
         return basePrice;
     }
 
+    /** 兼容别名：与 getBasePrice() 同义。
+     * B 模块 EconomyServiceImpl（service/economy/impl 第 197 行）当前调用此名；
+     * 待团队统一方法名后删除（决策 D12：CropType 单一数据源，由 A 维护）。 */
+    public int getBaseSellPrice() {
+        return basePrice;
+    }
+
     public int getBaseScore() {
         return baseScore;
     }
