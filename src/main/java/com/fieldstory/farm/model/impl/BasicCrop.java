@@ -29,7 +29,7 @@ public class BasicCrop implements Crop {
     /** 主动浇水累计次数 */
     private int manualWaterCount;
 
-        /** 最近一次主动浇水的游戏日（游戏日，来自 GameClock.getGameDay）；
+    /** 最近一次主动浇水的游戏日（游戏日，来自 GameClock.getGameDay）；
      *  默认 -1 哨兵表示"从未浇水"，与游戏日 0 区分（决策 D14） */
     private long lastManualWaterGameDay = -1;
 
