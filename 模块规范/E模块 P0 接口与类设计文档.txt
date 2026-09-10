@@ -128,6 +128,11 @@ String lastManualWaterGameDay;
 ```
 
 > 注：`state/cropType/growthStage` 以**字符串**存取，A 交付后由 A 适配层做“A 枚举名 ↔ 字符串”双向映射——字符串值建议就等于 A 的枚举 `name()`，映射零成本。
+>
+> **D14（时间类型与浇水哨兵）**：A 侧 `plantWorldTime` = `long`（游戏小时，`GameClock.getGameDay()×24 + getGameHour()`），
+> `lastManualWaterGameDay` = `long`（游戏日，原 `int` 拓宽；**无浇水记录 = `-1`**）；`BasicCrop` 字段默认 `-1` 哨兵。
+> E 当前仍以**字符串**存取这两个字段（上表），接入时由适配层负责 `long ↔ 字符串` 换算，且
+> **反序列化“无浇水记录”必须映射 `-1`**。D 的 `GameClock` 无需新增 `getWorldTime()`。
 
 ---
 
@@ -369,6 +374,7 @@ String lastManualWaterGameDay;
 ```
 - 要求：以上字段名是 JSON 键名，**不许改名/改含义**；A 适配层填值时逐一对齐。
 - 反序列化细节：`plotId` 为空会自动补成 `"row,column"`；`crop` 缺失时按无作物处理。
+- **D14**：`plantWorldTime`（`long` 游戏小时）、`lastManualWaterGameDay`（`long`，无记录 `-1`）与上表字符串字段的换算在适配层完成；**JSON 键名与 E 端存储（字符串）在 D14 下不变**，仅 A 侧类型与哨兵语义按 D14 调整。
 
 ---
 
