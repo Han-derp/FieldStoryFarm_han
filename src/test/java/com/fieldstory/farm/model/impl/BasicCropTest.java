@@ -24,7 +24,7 @@ class BasicCropTest {
         assertEquals(0.0, crop.getGrowthProgress());
         assertEquals(0L, crop.getPlantWorldTime());
         assertEquals(0, crop.getManualWaterCount());
-        assertEquals(0L, crop.getLastManualWaterGameDay());
+         assertEquals(-1L, crop.getLastManualWaterGameDay(), "新作物默认从未浇水（哨兵 -1，D14）");
     }
 
     @Test

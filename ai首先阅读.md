@@ -29,42 +29,7 @@
 6. 发现文档间矛盾时立即停止并报告，禁止自行选择其中一种
 
 【本次任务】
-我是lyj，角色A。在 src/test/java 下新增两个测试类
-（JUnit 5；本服务无外部模块依赖，直接用真实 Basic* 对象，无需桩）：
-
-1. GrowthServiceTest（放 service.impl 包）：
-   使用 BasicGrowthService(new BasicWateringService())：
-   - 非整日成长：小麦（基础 50/日）经 12 游戏小时（=0.5 天）
-     → 成长 +25（验收规范 §二十五）
-   - 浇水加成：manualWaterCount=1（+5%）时小麦 1 天 → 52.5
-     （验收规范 §二十四）
-   - 封顶：progress=95 再成长 1 天 → 钳制 100 且阶段 MATURE
-     （验收规范 §三十）
-   - 阶段边界：progress=19.99→SEED、20→SPROUT、50→GROWING、
-     100→MATURE（先 setGrowthProgress 再 applyGrowth(crop, 0)
-     触发阶段更新，验收规范 §二十二）
-
-2. WateringServiceTest（放 service.impl 包）：
-   使用 BasicCrop + BasicWateringService：
-   - SEED 阶段浇水 → SEED_STAGE 且 count 不变（§二十六）
-   - 同一游戏日第二次浇水 → ALREADY_WATERED_TODAY 且 count 不变
-     （§二十七）
-   - 连续 5 个游戏日（第 0~4 天）各浇 1 次 → 全部 SUCCESS，
-     count=5（§二十八；D11 第 5 次有效）
-   - 第 6 次 → WATER_LIMIT_REACHED（D11）
-   - 第 0 游戏日首次浇水成功（-1 哨兵不误判，D14）
-   - calculateWaterGrowthBonus：count=0→0.0、count=4→0.20、
-     count=5→0.20 封顶（规则文档 §二十七）
-
-【强制约束】（在
-模板基础上追加）
-- 只新增 2 个测试文件，不改任何现有文件
-- 禁止真实系统时间与随机数
-
-【输出要求】（覆盖模板默认段）
-1. 2 个测试文件路径
-2. mvn test 全绿（附输出）
-3. 每个用例对应的验收条目溯源
+（任务卡占位：把组长/师傅发的任务卡原文粘贴在此处。
 若任务卡自带【强制约束】【输出要求】，以任务卡为准，模板对应段落作废。）
 
 【输出要求】
