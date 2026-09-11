@@ -3,6 +3,8 @@ package com.fieldstory.farm.model;
 import com.fieldstory.farm.model.impl.BasicGameClock;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -69,8 +71,8 @@ class FarmGameModelTest {
         }
 
         @Override
-        public java.util.List<Soil> getSoils() {
-            return java.util.List.of();
+        public List<Soil> getSoils() {
+            return List.of();
         }
     }
 }

@@ -4,6 +4,7 @@ import com.fieldstory.farm.manager.SceneManager;
 import com.fieldstory.farm.model.Crop;
 import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.Farm;
+import com.fieldstory.farm.model.GameClock;
 import com.fieldstory.farm.model.GrowthStage;
 import com.fieldstory.farm.model.Soil;
 import com.fieldstory.farm.service.HarvestResult;
@@ -35,19 +36,15 @@ import java.util.List;
  * 收获业务（读取售价、金币入账、土地回退）全部在 C 的服务内完成
  * （决策 D09：土地回退经 A 的 LandService.removeCropAndSetTilled）。
  *
- * <p>浇水 currentGameDay 暂用常量 {@link #P0_CURRENT_GAME_DAY}=0L，
- * D 的 GameClock 接入后改为 getGameDay()（TODO）。
+ * <p>浇水 currentGameDay 不再用 P0 常量：当前游戏日来自 D 的
+ * GameClock.getGameDay()，浇水时传入 WateringService，
+ * 刷新视图前同步给 FarmView（{@link FarmView#setCurrentGameDay}）。
  *
  * <p>纯静态函数 {@link #actionsFor} / {@link #actionMessageFor} 只返回
  * 枚举/字符串，不依赖 JavaFX 线程，可在无 GUI 线程下单测。
  */
 public class FarmViewController {
 
-    /**
-     * P0 当前游戏日常量：浇水时传入（任务指定）。
-     * TODO D 的 GameClock 接入后改为 gameClock.getGameDay()。
-     */
-    private static final long P0_CURRENT_GAME_DAY = 0L;
 
     /** 农场模型（12×12，中心 8×8 为 FARM_PLOT） */
     private final Farm farm;
@@ -61,8 +58,8 @@ public class FarmViewController {
     /** 浇水服务（A：三重校验 + 浇水计数） */
     private final WateringService wateringService;
 
-    /** 收获服务（C：校验成熟 → 售价入账 → 土地回退 TILLED，决策 D09） */
-    private final HarvestService harvestService;
+private final HarvestService harvestService;
+private final GameClock gameClock;
 
     /** 农场画布视图 */
     private final FarmView farmView;
@@ -74,16 +71,27 @@ public class FarmViewController {
      * @param landService     开垦服务
      * @param plantingService 播种服务
      * @param wateringService 浇水服务
-     * @param harvestService  收获服务（C 模块，决策 D09）
-     */
-    public FarmViewController(Farm farm, LandService landService,
-                              PlantingService plantingService, WateringService wateringService,
-                              HarvestService harvestService) {
+public FarmViewController(
+        Farm farm,
+        LandService landService,
+        PlantingService plantingService,
+        WateringService wateringService,
+        HarvestService harvestService,
+        GameClock gameClock) {
         this.farm = farm;
         this.landService = landService;
         this.plantingService = plantingService;
         this.wateringService = wateringService;
-        this.harvestService = harvestService;
+this.farm = farm;
+this.landService = landService;
+this.plantingService = plantingService;
+this.wateringService = wateringService;
+
+this.harvestService = harvestService;
+this.gameClock = gameClock;
+
+this.farmView = new FarmView(farm);
+this.farmView.setOnTileSelected(this::onTileSelected);
         this.farmView = new FarmView(farm);
         this.farmView.setOnTileSelected(this::onTileSelected);
     }
@@ -210,6 +218,8 @@ public class FarmViewController {
 
     /** 点击格回调：选中 + 按状态弹菜单；装饰区点击收起菜单。 */
     private void onTileSelected(Soil soil) {
+        // 选中前同步当前游戏日（Tooltip"今日已浇"判定基准，来自 D 的 GameClock）
+        farmView.setCurrentGameDay(gameClock.getGameDay());
         if (soil == null) {
             farmView.hideMenu();
             farmView.selectTile(null);
@@ -276,6 +286,7 @@ public class FarmViewController {
         ReclaimResult result = landService.reclaim(soil);
         if (result == ReclaimResult.SUCCESS) {
             farmView.hideMenu();
+            farmView.setCurrentGameDay(gameClock.getGameDay());
             farmView.refreshTile(soil);
         } else {
             farmView.showTip(soil, actionMessageFor(result));
@@ -302,6 +313,7 @@ public class FarmViewController {
         PlantingResult result = plantingService.plant(soil, type);
         if (result == PlantingResult.SUCCESS) {
             farmView.hideMenu();
+            farmView.setCurrentGameDay(gameClock.getGameDay());
             farmView.refreshTile(soil);
         } else {
             farmView.showTip(soil, actionMessageFor(result));
@@ -314,9 +326,10 @@ public class FarmViewController {
         if (crop == null) {
             return;
         }
-        WateringResult result = wateringService.water(crop, P0_CURRENT_GAME_DAY);
+        WateringResult result = wateringService.water(crop, gameClock.getGameDay());
         if (result == WateringResult.SUCCESS) {
             farmView.hideMenu();
+            farmView.setCurrentGameDay(gameClock.getGameDay());
             farmView.refreshTile(soil);
         } else {
             farmView.showTip(soil, actionMessageFor(result));

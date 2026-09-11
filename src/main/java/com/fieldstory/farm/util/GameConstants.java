@@ -106,6 +106,16 @@ public final class GameConstants {
      */
     public static final int DAY_END = 1080;
 
+    /**
+     * 每次基础游戏时钟tick推进的游戏天数。
+     *
+     * 由 {@link #MINUTES_PER_TICK} ÷ {@link #MINUTES_PER_DAY} 折算：
+     * 10 ÷ 1440，供主循环协调 GrowthService 时计算经过游戏天数
+     * （验收规范 §二十五：必须支持非整日成长）。
+     */
+    public static final double GAME_DAYS_PER_TICK =
+            (double) MINUTES_PER_TICK / MINUTES_PER_DAY;
+
 
     // =========================================================
     // 玩家与经济
@@ -161,6 +171,119 @@ public final class GameConstants {
      * P2由EventService正式提供事件效果。
      */
     public static final double EVENT_RATE_P0 = 1.0;
+
+
+    // =========================================================
+    // P1天气概率（规则文档 §十九）
+    // =========================================================
+
+    /**
+     * 晴天出现概率（百分比）。
+     *
+     * 规则文档 §十九：40%。
+     */
+    public static final int WEATHER_PROB_SUNNY = 40;
+
+    /**
+     * 雨天出现概率（百分比）。
+     *
+     * 规则文档 §十九：25%。
+     */
+    public static final int WEATHER_PROB_RAIN = 25;
+
+    /**
+     * 干旱出现概率（百分比）。
+     *
+     * 规则文档 §十九：20%。
+     */
+    public static final int WEATHER_PROB_DROUGHT = 20;
+
+    /**
+     * 绿雨出现概率（百分比）。
+     *
+     * 规则文档 §十九：15%。
+     */
+    public static final int WEATHER_PROB_GREEN_RAIN = 15;
+
+
+    // =========================================================
+    // P1天气成长倍率（规则文档 §十九）
+    // =========================================================
+
+    /**
+     * 晴天成长倍率。
+     *
+     * 规则文档 §十九：×1.0。
+     */
+    public static final double WEATHER_RATE_SUNNY = 1.0;
+
+    /**
+     * 雨天成长倍率。
+     *
+     * 规则文档 §十九：×1.5。
+     */
+    public static final double WEATHER_RATE_RAIN = 1.5;
+
+    /**
+     * 干旱成长倍率。
+     *
+     * 规则文档 §十九：×0.5。
+     */
+    public static final double WEATHER_RATE_DROUGHT = 0.5;
+
+    /**
+     * 绿雨成长倍率。
+     *
+     * 规则文档 §十九：×2.0。
+     */
+    public static final double WEATHER_RATE_GREEN_RAIN = 2.0;
+
+
+    // =========================================================
+    // P1天气品质分（规则文档 §三十五）
+    // =========================================================
+
+    /**
+     * 雨天品质分/次。
+     *
+     * 规则文档 §三十五：+5。
+     */
+    public static final int WEATHER_QUALITY_RAIN = 5;
+
+    /**
+     * 雨天品质分上限。
+     *
+     * 规则文档 §三十五：+20。
+     */
+    public static final int WEATHER_QUALITY_RAIN_CAP = 20;
+
+    /**
+     * 干旱品质分/次。
+     *
+     * 规则文档 §三十五：+8。
+     */
+    public static final int WEATHER_QUALITY_DROUGHT = 8;
+
+    /**
+     * 干旱品质分上限。
+     *
+     * 规则文档 §三十五：+24。
+     */
+    public static final int WEATHER_QUALITY_DROUGHT_CAP = 24;
+
+    /**
+     * 绿雨品质分/次。
+     *
+     * 规则文档 §三十五：+15。
+     */
+    public static final int WEATHER_QUALITY_GREEN_RAIN = 15;
+
+    /**
+     * 绿雨品质分上限。
+     *
+     * 规则文档 §三十五：+45。
+     */
+    public static final int WEATHER_QUALITY_GREEN_RAIN_CAP = 45;
 
 
     /**
