@@ -22,11 +22,15 @@ public class MainController {
         welcomeText.setText("欢迎来到田野故事农场！");
     }
 
-    /** 开始 / 继续游戏：有存档恢复退出瞬间状态，无存档则新建游戏（金币 500）。 */
+    /**
+     * 开始 / 继续游戏：有存档恢复退出瞬间状态，无存档则新建游戏（金币 500）。
+     * 随后挂载农场场景（FarmBootstrap：菜地挂 CENTER、临时商店挂 RIGHT）。
+     */
     @FXML
     protected void onStartButtonClick() {
         boolean hasSave = gameManager.hasSavedGame();
         GameState state = gameManager.start();
+        FarmBootstrap.mountFarmScene();
         Player player = state.getPlayer();
         String gold = (player == null) ? "?" : String.valueOf(player.getGold());
         welcomeText.setText("开始耕种吧！当前金币：%s  游戏天数：%d%s".formatted(
