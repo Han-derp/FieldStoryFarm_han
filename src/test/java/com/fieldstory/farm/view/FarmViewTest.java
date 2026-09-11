@@ -112,34 +112,41 @@ class FarmViewTest {
 
     @Test
     void tooltipTextForDecorationArea() {
-        assertEquals("装饰区（P0 占位）", FarmView.tooltipTextFor(null));
+        assertEquals("装饰区（P0 占位）", FarmView.tooltipTextFor(null, 0L));
     }
 
     @Test
     void tooltipTextForEmpty() {
-        assertEquals("未开垦", FarmView.tooltipTextFor(soil(SoilState.EMPTY)));
+        assertEquals("未开垦", FarmView.tooltipTextFor(soil(SoilState.EMPTY), 0L));
     }
 
     @Test
     void tooltipTextForTilled() {
-        assertEquals("已开垦，可播种", FarmView.tooltipTextFor(soil(SoilState.TILLED)));
+        assertEquals("已开垦，可播种", FarmView.tooltipTextFor(soil(SoilState.TILLED), 0L));
     }
 
     @Test
     void tooltipTextForPlantedNotWateredToday() {
         assertEquals("小麦 成长50% 今日未浇",
-                FarmView.tooltipTextFor(plantedSoil(GrowthStage.SEED, -1)));
+                FarmView.tooltipTextFor(plantedSoil(GrowthStage.SEED, -1), 0L));
     }
 
     @Test
     void tooltipTextForPlantedWateredToday() {
         assertEquals("小麦 成长50% 今日已浇",
-                FarmView.tooltipTextFor(plantedSoil(GrowthStage.SEED, 0L)));
+                FarmView.tooltipTextFor(plantedSoil(GrowthStage.SEED, 0L), 0L));
+    }
+
+    @Test
+    void tooltipTextForPlantedWateredTodayWhenDayEqualsLastManualWaterGameDay() {
+        // 当前游戏日 == lastManualWaterGameDay → 文案含"今日已浇"（决策 D14 long 用 ==）
+        assertEquals("小麦 成长50% 今日已浇",
+                FarmView.tooltipTextFor(plantedSoil(GrowthStage.GROWING, 3L), 3L));
     }
 
     @Test
     void tooltipTextForMature() {
         assertEquals("已成熟，可收获",
-                FarmView.tooltipTextFor(plantedSoil(GrowthStage.MATURE, -1)));
+                FarmView.tooltipTextFor(plantedSoil(GrowthStage.MATURE, -1), 0L));
     }
 }

@@ -100,12 +100,6 @@ public class FarmView extends Pane {
     /** 菜单 VBox 内边距（UI规范 §16 Panel 风格） */
     private static final Insets MENU_PADDING = new Insets(8);
 
-    /**
-     * P0 游戏日常量：用于 Tooltip"今日已浇/未浇"判定。
-     * TODO D 的 GameClock 接入后，本方法应改为接收 getGameDay() 而非常量 0L。
-     */
-    private static final long P0_GAME_DAY = 0L;
-
     // ==================== 按钮样式（颜色取自 §13/§14，见上方常量） ====================
 
     private static final String STYLE_BTN_NORMAL = "-fx-background-color: #A97850;"
@@ -125,6 +119,13 @@ public class FarmView extends Pane {
 
     /** 数据源：12×12 地图（非 FARM_PLOT 格 getSoil 返回 null） */
     private final Farm farm;
+
+    /**
+     * 当前游戏日：Tooltip"今日已浇/未浇"判定基准
+     * （由 Controller 经 {@link #setCurrentGameDay} 同步，来自 D 的
+     * GameClock.getGameDay()，决策 D14 时间口径 long）。
+     */
+    private long currentGameDay = 0L;
 
     /** 每格底色矩形 */
     private final Rectangle[][] tiles = new Rectangle[MAP_SIZE][MAP_SIZE];
@@ -164,6 +165,17 @@ public class FarmView extends Pane {
     }
 
     // ==================== 纯静态函数（可无 GUI 线程单测） ====================
+
+    /**
+     * 更新当前游戏日（Tooltip"今日已浇/未浇"判定基准）。
+     * 由 Controller 在选中格/动作完成后、刷新视图前同步，
+     * 值为 D 的 GameClock.getGameDay()。
+     *
+     * @param currentGameDay 当前游戏日
+     */
+    public void setCurrentGameDay(long currentGameDay) {
+        this.currentGameDay = currentGameDay;
+    }
 
     /**
      * 纯函数：按格类型与土壤状态推导底色。
@@ -231,10 +243,11 @@ public class FarmView extends Pane {
      * <p>五种文案：null=装饰区占位、EMPTY=未开垦、TILLED=已开垦可播种、
      * PLANTED=作物名+成长x%+今日已浇/未浇、MATURE=已成熟可收获。
      *
-     * @param soil 该格土地（装饰区为 null）
+     * @param soil           该格土地（装饰区为 null）
+     * @param currentGameDay 当前游戏日（来自 D 的 GameClock.getGameDay）
      * @return Tooltip 文案
      */
-    public static String tooltipTextFor(Soil soil) {
+    public static String tooltipTextFor(Soil soil, long currentGameDay) {
         if (soil == null) {
             return "装饰区（P0 占位）";
         }
@@ -251,8 +264,8 @@ public class FarmView extends Pane {
                 if (crop == null) {
                     return "已播种";
                 }
-                // TODO D 的 GameClock 接入后，"今日"应取 getGameDay() 而非 P0_GAME_DAY
-                boolean wateredToday = crop.getLastManualWaterGameDay() == P0_GAME_DAY;
+                // "今日已浇"判定：lastManualWaterGameDay == 当前游戏日（决策 D14 long 用 ==）
+                boolean wateredToday = crop.getLastManualWaterGameDay() == currentGameDay;
                 return crop.getCropType().getDisplayName() + " 成长"
                         + (int) crop.getGrowthProgress() + "% 今日"
                         + (wateredToday ? "已浇" : "未浇");
@@ -275,7 +288,7 @@ public class FarmView extends Pane {
                 tile.setFill(tileColorFor(plotType, soil));
                 tile.setStroke(COLOR_TEXT);
                 tile.setStrokeWidth(1);
-                Tooltip tooltip = new Tooltip(tooltipTextFor(soil));
+                Tooltip tooltip = new Tooltip(tooltipTextFor(soil, currentGameDay));
                 Tooltip.install(tile, tooltip);
                 int clickedRow = row;
                 int clickedColumn = column;
@@ -326,6 +339,19 @@ public class FarmView extends Pane {
         tiles[row][column].setFill(tileColorFor(plotType, soil));
         updateCropBlock(row, column, plotType, soil);
         refreshTooltip(soil);
+    }
+
+    /**
+     * 整图刷新：遍历农场全部 Soil，逐格刷新底色、作物块与 Tooltip
+     * （refreshTile 已含 refreshTooltip，此处再显式刷新一次以覆盖
+     * 直接改文案的场景）。供 E 的跨天成长回调调用：跨天后
+     * "今日已浇/未浇"判定随 {@link #currentGameDay} 更新。
+     */
+    public void refreshAll() {
+        for (Soil soil : farm.getSoils()) {
+            refreshTile(soil);
+            refreshTooltip(soil);
+        }
     }
 
     // ==================== 选中与菜单（UI规范 §11、§12） ====================
@@ -433,7 +459,7 @@ public class FarmView extends Pane {
         if (soil == null) {
             return;
         }
-        tooltips[soil.getRow()][soil.getColumn()].setText(tooltipTextFor(soil));
+        tooltips[soil.getRow()][soil.getColumn()].setText(tooltipTextFor(soil, currentGameDay));
     }
 
     private void buildMenu() {
