@@ -37,9 +37,11 @@ public interface GameClock {
 存档恢复	必须提供 setTotalMinutes(int) 方法供 E 模块恢复存档	验收规范 §41
 禁止新增方法	P0 阶段不得添加天气、离线、事件相关方法	验收规范 §10
 1.4 序列化字段
-JSON 存档中必须保存 totalMinutes，字段名约定为 worldTimeTotalMinutes。
+JSON 存档中必须保存世界时间。D 模块通过 FarmGameModel.getWorldTimeTotalMinutes() 提供 int 值（对应 GameClock.getTotalMinutes()）。
 
-依据：验收规范 §41、§42
+存档字段名以 E 模块 GameState 为准：currentWorldTime（String，ISO-8601）。D 模块不直接读写 JSON 字段，仅提供/接收 int 值。
+
+依据：验收规范 §41、§42；决策记录（方案 A：以 E 模块 GameState.currentWorldTime 为唯一存档字段）
 
 二、BasicGameClock 实现类
 2.1 类定义
@@ -290,20 +292,24 @@ public enum EventType {
 
 九、存档对接（与 E 模块协作）
 9.1 提供的存档字段
-成员D向 E 模块提供以下字段，由 E 模块在 GameState（或 SaveData）中保存：
+成员D向 E 模块提供以下值，由 E 模块在 GameState（或 SaveData）中保存：
 
 java
-private int worldTimeTotalMinutes;  // 对应 GameClock.getTotalMinutes()
-9.2 存档恢复流程
-E 模块读取 JSON/SQLite 中的 worldTimeTotalMinutes
+// D 模块提供（int，对应 GameClock.getTotalMinutes()）
+public int getWorldTimeTotalMinutes()
 
-E 模块调用 farmGameModel.restoreWorldTime(worldTimeTotalMinutes)
+// E 模块 GameState 中的存档字段（方案 A：以 E 模块为准）
+private String currentWorldTime;  // ISO-8601，由 E 模块从 int 值转换后保存
+9.2 存档恢复流程
+E 模块读取 JSON/SQLite 中的 currentWorldTime（ISO-8601），转换为 int 总分钟数
+
+E 模块调用 farmGameModel.restoreWorldTime(int totalMinutes)
 
 然后再初始化其他组件
 
 9.3 行为约束
 约束项	约束内容	来源
-P0 存档格式	JSON 临时存档，保存 worldTimeTotalMinutes	验收规范 §41
+P0 存档格式	JSON 临时存档，保存 currentWorldTime（E 模块 GameState 字段，ISO-8601）	验收规范 §41
 P0 退出行为	退出时保存当前世界时间，不推进离线	验收规范 §42
 P1 迁移兼容	totalMinutes 字段与 SQLite world_state.current_world_time 对齐	验收规范 §72、§73
 十、单元测试要求
@@ -329,7 +335,7 @@ getPlayer() 返回 null	显示 "💰 --"，不抛出 NPE	非功能需求 §2.2
 接口稳定性	GameClock 接口在 P0 确定后，后续阶段只新增不修改现有方法
 11.2 与 E 模块（存档）
 约定项	内容
-存档字段	E 模块保存 worldTimeTotalMinutes（int 类型）
+存档字段	E 模块 GameState 保存 currentWorldTime（String，ISO-8601）；D 模块提供 int 值（getWorldTimeTotalMinutes()）
 恢复方法	E 模块调用 FarmGameModel.restoreWorldTime(int)
 存档时机	购买、播种、收获等行为后自动保存，退出时强制保存
 十二、约束来源索引
@@ -360,7 +366,7 @@ FarmController 使用 Timeline 而非 Timer	☐
 所有常量通过 GameConstants 引用，无魔法数字	☐
 P0 倍率常量带 _P0 后缀	☐
 P0 代码中无 WeatherType / EventType 的业务引用	☐
-GameState 包含 worldTimeTotalMinutes 字段	☐
+GameState 包含 currentWorldTime 字段（方案 A；D 模块提供 int 值）	☐
 单元测试覆盖固定种子和时间边界	☐
 跨模块接口通过 FarmGameModel 暴露	☐
 包名统一为 com.fieldstory.farm.*	☐

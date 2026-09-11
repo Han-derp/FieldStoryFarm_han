@@ -4,38 +4,78 @@ import java.util.EnumMap;
 import java.util.Map;
 
 /**
- * 玩家资源状态对象（B 模块 Player 模型，见 B 模块 §10）。
+ * 玩家数据对象。
  *
- * <p>P0 至少保存：{@code gold} 金币与 {@code seedInventory} 种子库存。
- * <b>唯一种子库存</b>即本字段，禁止在别处（如 GameState）再维护第二份库存状态
- * （B 模块 §6.2）。种子数量的变化应经 B 的 EconomyService，本类的
- * {@link #setSeedInventory(Map)} 仅供状态恢复/序列化使用。
+ * P0阶段负责保存：
+ * 1. 玩家名称
+ * 2. 金币
+ * 3. 种子库存
  *
- * <p><b>新档金币请勿直接 {@code new Player()}</b>：无参构造为占位默认值（100），
- * 新游戏请统一走 {@code GameManager.getInstance().start()/startNewGame()} 或
- * {@code GameManager.newGame()}（初始金币 500，见 B 模块 §9 / E 模块 §C3）。
+ * Player只保存状态，不处理经济业务逻辑。
  */
 public class Player {
 
-    /** 玩家姓名 */
+    /**
+     * 玩家名称。
+     */
     private String name;
 
-    /** 金币数量 */
+    /**
+     * 玩家金币。
+     */
     private int gold;
 
     /**
-     * 种子库存：作物类型 → 持有数量（唯一种子库存，B 模块 §6.2/§10.1）。
-     * 使用 EnumMap 保证枚举键紧凑有序，且 {@link #getSeedInventory()} 恒不返回 null。
+     * 玩家种子库存。
      */
-    private Map<CropType, Integer> seedInventory = new EnumMap<>(CropType.class);
+    private Map<CropType, Integer> seedInventory;
 
+    /**
+     * 无参构造器。
+     *
+     * 主要用于JSON反序列化、框架创建对象。
+     * 正常新游戏请通过GameManager创建。
+     */
     public Player() {
-        this("农夫", 100);
+        this.name = "";
+        this.gold = 0;
+        this.seedInventory = createEmptySeedInventory();
     }
 
+    /**
+     * 创建指定名称和初始金币的玩家。
+     *
+     * GameManager.newGame()使用此构造器。
+     *
+     * @param name 玩家名称
+     * @param gold 初始金币
+     */
     public Player(String name, int gold) {
+
+        if (gold < 0) {
+            throw new IllegalArgumentException(
+                    "gold must not be negative"
+            );
+        }
+
         this.name = name;
         this.gold = gold;
+        this.seedInventory = createEmptySeedInventory();
+    }
+
+    /**
+     * 创建三种作物的空种子库存。
+     */
+    private Map<CropType, Integer> createEmptySeedInventory() {
+
+        Map<CropType, Integer> inventory =
+                new EnumMap<>(CropType.class);
+
+        for (CropType type : CropType.values()) {
+            inventory.put(type, 0);
+        }
+
+        return inventory;
     }
 
     public String getName() {
@@ -50,23 +90,50 @@ public class Player {
         return gold;
     }
 
+    /**
+     * 主要供状态恢复使用。
+     *
+     * 正常游戏中的金币增加和减少
+     * 应通过EconomyService完成。
+     */
     public void setGold(int gold) {
+
+        if (gold < 0) {
+            throw new IllegalArgumentException(
+                    "gold must not be negative"
+            );
+        }
+
         this.gold = gold;
     }
 
-    /** 种子库存（作物类型 → 数量）；可写集合，缺失作物视为 0，恒不为 null。 */
     public Map<CropType, Integer> getSeedInventory() {
         return seedInventory;
     }
 
     /**
-     * 仅用于状态恢复/序列化。
-     * 正常游戏业务禁止直接调用，种子变化应经过 EconomyService。
-     * 传入 null 时重置为空库存，保证 {@link #getSeedInventory()} 恒不为 null。
+     * 主要供JSON存档恢复使用。
+     *
+     * 正常游戏中的种子增减
+     * 应通过EconomyService完成。
      */
-    public void setSeedInventory(Map<CropType, Integer> seedInventory) {
-        this.seedInventory = (seedInventory == null)
-                ? new EnumMap<>(CropType.class)
-                : seedInventory;
+    public void setSeedInventory(
+            Map<CropType, Integer> seedInventory) {
+
+        if (seedInventory == null) {
+            this.seedInventory =
+                    createEmptySeedInventory();
+            return;
+        }
+
+        this.seedInventory =
+                new EnumMap<>(CropType.class);
+
+        for (CropType type : CropType.values()) {
+            this.seedInventory.put(
+                    type,
+                    seedInventory.getOrDefault(type, 0)
+            );
+        }
     }
 }
