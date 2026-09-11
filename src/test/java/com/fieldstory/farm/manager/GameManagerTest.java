@@ -52,9 +52,18 @@ class GameManagerTest {
         assertEquals(GameManager.INITIAL_GOLD, state.getPlayer().getGold());
         assertEquals(0L, state.getGameDay());
         assertTrue(state.getPlots().isEmpty());
-        // 唯一种子库存归 Player（B §6.2），新档为空且非 null
+        // 唯一种子库存归 Player（B §6.2）；D15：库存"空"= 全部 CropType 预填 0 计数，
+        // 故新档非 null、非空表，且三种作物计数全为 0（不再断言 isEmpty）
         assertNotNull(state.getPlayer().getSeedInventory());
-        assertTrue(state.getPlayer().getSeedInventory().isEmpty());
+        assertEquals(CropType.values().length, state.getPlayer().getSeedInventory().size());
+        int seedTotal = 0;
+        for (CropType type : CropType.values()) {
+            Integer count = state.getPlayer().getSeedInventory().get(type);
+            assertNotNull(count, "新档种子库存应预填 " + type + " 键");
+            assertEquals(0, count.intValue(), "新档 " + type + " 计数应为 0");
+            seedTotal += count;
+        }
+        assertEquals(0, seedTotal, "新档种子总数应为 0（三种作物计数之和为 0）");
     }
 
     @Test

@@ -15,6 +15,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -183,19 +184,28 @@ class JsonSaveServiceTest {
     }
 
     @Test
-    void playerWithoutSeedsRoundTripsAsEmptyInventory() throws Exception {
+    void playerWithoutSeedsRoundTripsAsFullZeroCountInventory() throws Exception {
         JsonSaveService svc = service("noseeds.json");
         GameState state = new GameState(new Player("农夫", 500), 0L);
 
         svc.save(state);
         GameState loaded = svc.load();
 
-        assertTrue(loaded.getPlayer().getSeedInventory().isEmpty());
+        // D15：库存"空"= 全部 CropType 预填 0 计数；往返后恒为「3 键 0 计数表」，
+        // 键集与顺序无关，不因缺省而塌缩，故 isEmpty() 为 false
+        assertNotNull(loaded.getPlayer().getSeedInventory());
+        assertFalse(loaded.getPlayer().getSeedInventory().isEmpty());
+        assertEquals(CropType.values().length, loaded.getPlayer().getSeedInventory().size());
+        for (CropType type : CropType.values()) {
+            assertNotNull(loaded.getPlayer().getSeedInventory().get(type),
+                    "往返后应保留 " + type + " 键");
+            assertEquals(0, seedCount(loaded.getPlayer(), type));
+        }
     }
 
     @Test
     void loadLegacyVersion1WithoutSeedInventoryStillLoads() throws Exception {
-        // v1 旧档没有 seedInventory 字段：应兼容读入，种子库存按空处理
+        // v1 旧档没有 seedInventory 字段：应兼容读入
         Path file = tempDir.resolve("legacy-v1.json");
         Files.writeString(file,
                 "{\"version\":1,\"schema\":\"P0-json\",\"gameDay\":7,"
@@ -206,7 +216,12 @@ class JsonSaveServiceTest {
         GameState loaded = svc.load();
         assertEquals(7L, loaded.getGameDay());
         assertEquals(250, loaded.getPlayer().getGold());
-        assertTrue(loaded.getPlayer().getSeedInventory().isEmpty());
+        // D15：缺字段 → Player.setSeedInventory(null/空表) 的既有归一化行为 → 全部 CropType 预填 0 表
+        assertNotNull(loaded.getPlayer().getSeedInventory());
+        assertEquals(CropType.values().length, loaded.getPlayer().getSeedInventory().size());
+        for (CropType type : CropType.values()) {
+            assertEquals(0, seedCount(loaded.getPlayer(), type), "旧档种子库存应按 0 计数归一化");
+        }
     }
 
     @Test
@@ -226,7 +241,7 @@ class JsonSaveServiceTest {
 
     @Test
     void loadSkipsUnknownCropTypeName() throws Exception {
-        // 未来新增作物名：旧程序应跳过而不崩溃，已知作物正常读入
+        // 未来新增作物名：旧程序应跳过而不崩溃（兼容性红线），已知作物正常读入
         Path file = tempDir.resolve("future-crop.json");
         Files.writeString(file,
                 "{\"version\":2,\"schema\":\"P0-json\",\"gameDay\":0,"
@@ -235,9 +250,16 @@ class JsonSaveServiceTest {
                 StandardCharsets.UTF_8);
         JsonSaveService svc = new JsonSaveService(file);
 
+        // 未知键 PUMPKIN 被忽略（load 不抛异常即证明未崩溃）
         GameState loaded = svc.load();
         assertEquals(2, seedCount(loaded.getPlayer(), CropType.WHEAT));
-        assertEquals(1, loaded.getPlayer().getSeedInventory().size());
+        // D15：忽略未知键后按已知 CropType 归一化 → 恒为全部作物键，未知键不占用键位
+        assertEquals(CropType.values().length, loaded.getPlayer().getSeedInventory().size());
+        for (CropType type : CropType.values()) {
+            if (type != CropType.WHEAT) {
+                assertEquals(0, seedCount(loaded.getPlayer(), type), "未出现的作物应归一化为 0");
+            }
+        }
     }
 
     @Test
