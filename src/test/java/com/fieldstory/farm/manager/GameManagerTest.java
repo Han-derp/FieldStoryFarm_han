@@ -1,5 +1,6 @@
 package com.fieldstory.farm.manager;
 
+import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.GameState;
 import com.fieldstory.farm.model.PlotState;
 import com.fieldstory.farm.persistence.JsonSaveService;
@@ -51,6 +52,9 @@ class GameManagerTest {
         assertEquals(GameManager.INITIAL_GOLD, state.getPlayer().getGold());
         assertEquals(0L, state.getGameDay());
         assertTrue(state.getPlots().isEmpty());
+        // 唯一种子库存归 Player（B §6.2），新档为空且非 null
+        assertNotNull(state.getPlayer().getSeedInventory());
+        assertTrue(state.getPlayer().getSeedInventory().isEmpty());
     }
 
     @Test
@@ -67,6 +71,7 @@ class GameManagerTest {
         GameState state = gm.start();
 
         state.getPlayer().setGold(321);
+        state.getPlayer().getSeedInventory().put(CropType.CARROT, 7);
         state.setGameDay(9L);
         PlotState plot = new PlotState();
         plot.setRow(0);
@@ -86,6 +91,7 @@ class GameManagerTest {
         assertEquals(GamePhase.PLAYING, restarted.currentPhase());
         assertEquals(321, loaded.getPlayer().getGold());
         assertEquals(9L, loaded.getGameDay());
+        assertEquals(7, loaded.getPlayer().getSeedInventory().get(CropType.CARROT));
         assertEquals(1, loaded.getPlots().size());
         assertEquals("TILLED", loaded.getPlots().get(0).getState());
     }

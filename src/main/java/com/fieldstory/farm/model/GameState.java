@@ -4,14 +4,17 @@ package com.fieldstory.farm.model;
  * 存档聚合（E 存档模块持有）。
  *
  * <p>P0 JSON 存档（验收规范 §四十~§四十二）以本类为保存/加载单元，至少覆盖：
- * Player 经济（金币）、游戏天数（GameClock.getGameDay()）、每块土地完整状态
+ * Player 经济（金币与种子库存，见 {@link Player}）、
+ * 游戏天数（GameClock.getGameDay()）、每块土地完整状态
  * （空闲/已播种/成长中…+生长进度，见 {@link PlotState}）、已解锁内容。
  *
  * <p>本类只保存“现在是什么状态”，不含任何游戏计算（统一 Model 原则）。
+ * 种子库存的<b>唯一</b>归属是 {@link Player#getSeedInventory()}（B 模块 §6.2），
+ * 本类不再另存一份，避免出现两份库存状态。
  */
 public class GameState {
 
-    /** 玩家：姓名与金币（B 模块 Player 模型，骨架已提供） */
+    /** 玩家：姓名、金币与种子库存（B 模块 Player 模型） */
     private Player player;
 
     /** 游戏天数，对应 GameClock.getGameDay()（D 模块时钟接入后写入） */

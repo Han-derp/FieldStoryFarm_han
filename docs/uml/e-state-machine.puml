@@ -1,0 +1,44 @@
+@startuml e-state-machine
+title E 模块 · 应用生命周期状态机（GamePhase + GameManager）
+
+hide empty description
+skinparam shadowing false
+skinparam state {
+  BackgroundColor White
+  BorderColor #333333
+  ArrowColor #333333
+  FontSize 13
+}
+
+[*] --> MAIN_MENU
+
+MAIN_MENU --> PLAYING : start()\n[有档→load()；无档/损坏→newGame()]
+MAIN_MENU --> PLAYING : startNewGame()\n[强制新档，不读档也不写盘]
+MAIN_MENU --> EXITING : saveAndExit()\n[state==null → 跳过写盘]
+
+PLAYING --> PAUSED : pause()\n[守卫：仅 PLAYING 可暂停]
+PAUSED --> PLAYING : resume()\n[守卫：仅 PAUSED 可恢复]
+
+PLAYING --> EXITING : saveAndExit()\n[save(state) 后退出]
+PAUSED --> EXITING : saveAndExit()\n[save(state) 后退出]
+
+PLAYING --> PLAYING : saveNow()\n[仅落盘，不改阶段]
+PAUSED --> PAUSED : saveNow()\n[仅落盘，不改阶段]
+EXITING --> EXITING : saveAndExit()\n[幂等，不再写盘]
+
+EXITING --> PLAYING : start()\n[无守卫：可被重新拉起]
+EXITING --> [*] : MainApplication.stop() → JVM 退出
+
+note right of EXITING
+  phase 不落盘：重启必然回到 MAIN_MENU
+  设计意图 = 退出后不推进世界（离线模拟属 P2）
+end note
+
+note bottom of MAIN_MENU
+  非法转移（抛 IllegalStateException，阶段不变）：
+  pause()  仅允许从 PLAYING
+  resume() 仅允许从 PAUSED
+  currentState() / saveNow() 需已 start()（state != null）
+  初始态由构造器设置：phase = MAIN_MENU
+end note
+@enduml

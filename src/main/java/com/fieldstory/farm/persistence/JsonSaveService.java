@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.GameState;
 import com.fieldstory.farm.model.Player;
 import com.fieldstory.farm.model.PlotState;
@@ -15,24 +16,34 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.util.EnumMap;
+import java.util.Map;
 
 /**
  * P0 JSON 临时存档实现（验收规范 §四十~§四十二；脚手架 §九 运行数据 data/）。
  *
  * <ul>
  *   <li>默认文件：{@code data/save.json}（.gitignore 已忽略 data/，本地存档不进仓库）；</li>
- *   <li>根节点保留 {@code version}（=1）与 {@code schema} 标识：P1 迁 SQLite 时
- *       按版本增量迁移、读旧 JSON 一次性导入，禁止原地改结构；</li>
- *   <li>保存内容：Player 经济（name/gold）、gameDay（对应 GameClock.getGameDay）、
- *       unlocked（已解锁内容）、plots（每块土地/作物状态，验收 §四十一）；</li>
- *   <li>状态值以字符串保存、作物以对象嵌套，不依赖 A/D 尚未交付的枚举类型；</li>
+ *   <li>根节点保留 {@code version}（=2）与 {@code schema} 标识：P1 迁 SQLite 时
+ *       按版本增量迁移、读旧 JSON 一次性导入，禁止原地改结构；
+ *       v1 旧档仍可读入（缺 {@code player.seedInventory} 时按空库存处理），见
+ *       {@link #MIN_SUPPORTED_VERSION}；</li>
+ *   <li>保存内容：Player 经济（name/gold）与其<b>唯一种子库存</b>
+ *       {@code player.seedInventory}（验收 §十八/§四十一；B 模块 §6.2 禁止第二份库存）、
+ *       gameDay（对应 GameClock.getGameDay）、unlocked（已解锁内容）、
+ *       plots（每块土地/作物状态，验收 §四十一）；</li>
+ *   <li>种子库存键为 {@link CropType} 枚举名（WHEAT/CORN/CARROT），土地状态/作物类型
+ *       仍以字符串保存，不依赖 A/D 尚未交付的其余枚举类型；</li>
  *   <li>反序列化只恢复退出瞬间状态，不执行任何离线成长计算（离线模拟属 P2）。</li>
  * </ul>
  */
 public class JsonSaveService implements SaveService {
 
-    /** 当前存档结构版本；升级结构时必须递增并在加载时做兼容处理 */
-    public static final int SAVE_VERSION = 1;
+    /** 当前存档结构版本；升级结构时必须递增并在加载时做兼容处理（v2：新增 player.seedInventory） */
+    public static final int SAVE_VERSION = 2;
+
+    /** 仍可读入的最低存档版本；低于此版本的旧档直接拒绝 */
+    public static final int MIN_SUPPORTED_VERSION = 1;
 
     /** 存档格式标识（区分未来 SQLite 正式存档） */
     public static final String SCHEMA = "P0-json";
@@ -116,6 +127,7 @@ public class JsonSaveService implements SaveService {
             ObjectNode playerNode = root.putObject("player");
             playerNode.put("name", player.getName());
             playerNode.put("gold", player.getGold());
+            playerNode.set("seedInventory", toSeedInventoryNode(player.getSeedInventory()));
         } else {
             root.putNull("player");
         }
@@ -134,6 +146,19 @@ public class JsonSaveService implements SaveService {
             }
         }
         return root;
+    }
+
+    /** 种子库存（唯一种子库存，来自 {@link Player}）→ JSON 对象：枚举名 → 数量。 */
+    private ObjectNode toSeedInventoryNode(Map<CropType, Integer> inventory) {
+        ObjectNode node = mapper.createObjectNode();
+        if (inventory != null) {
+            for (Map.Entry<CropType, Integer> entry : inventory.entrySet()) {
+                if (entry.getKey() != null) {
+                    node.put(entry.getKey().name(), entry.getValue() == null ? 0 : entry.getValue());
+                }
+            }
+        }
+        return node;
     }
 
     private ObjectNode toPlotNode(PlotState plot) {
@@ -170,9 +195,9 @@ public class JsonSaveService implements SaveService {
             throw new IllegalStateException("存档文件为空或不是 JSON 对象");
         }
         int version = root.path("version").asInt(-1);
-        if (version != SAVE_VERSION) {
-            throw new IllegalStateException("存档版本不兼容: 期望 version=" + SAVE_VERSION
-                    + "，实际 version=" + version);
+        if (version < MIN_SUPPORTED_VERSION || version > SAVE_VERSION) {
+            throw new IllegalStateException("存档版本不兼容: 支持 version="
+                    + MIN_SUPPORTED_VERSION + "~" + SAVE_VERSION + "，实际 version=" + version);
         }
 
         GameState state = new GameState();
@@ -180,7 +205,9 @@ public class JsonSaveService implements SaveService {
         if (playerNode != null && playerNode.isObject()) {
             String name = playerNode.path("name").asText(null);
             int gold = playerNode.path("gold").asInt(0);
-            state.setPlayer(new Player(name, gold));
+            Player player = new Player(name, gold);
+            player.setSeedInventory(readSeedInventory(playerNode, root));
+            state.setPlayer(player);
         }
         state.setGameDay(root.path("gameDay").asLong(0L));
 
@@ -207,6 +234,43 @@ public class JsonSaveService implements SaveService {
             }
         }
         return state;
+    }
+
+    /**
+     * 读入种子库存。
+     *
+     * <p>优先取 {@code player.seedInventory}（v2 正式位置）；若缺失则回退根节点
+     * {@code seedInventory}，用于兼容早期 v2 快照。v1 旧档两处都没有 → 按空库存处理。
+     * 未知作物名（未来扩展）跳过，保证旧程序可向前读入新档而不崩溃。
+     */
+    private Map<CropType, Integer> readSeedInventory(JsonNode playerNode, JsonNode root) {
+        JsonNode seedNode = (playerNode == null) ? null : playerNode.get("seedInventory");
+        if (seedNode == null || !seedNode.isObject()) {
+            seedNode = root.get("seedInventory");
+        }
+
+        Map<CropType, Integer> inventory = new EnumMap<>(CropType.class);
+        if (seedNode != null && seedNode.isObject()) {
+            for (Map.Entry<String, JsonNode> entry : seedNode.properties()) {
+                CropType type = parseCropType(entry.getKey());
+                if (type != null) {
+                    inventory.put(type, entry.getValue().asInt(0));
+                }
+            }
+        }
+        return inventory;
+    }
+
+    /** 枚举名 → {@link CropType}；未知/空白名返回 null（调用方跳过）。 */
+    private CropType parseCropType(String name) {
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        try {
+            return CropType.valueOf(name);
+        } catch (IllegalArgumentException unknown) {
+            return null;
+        }
     }
 
     private PlotState toPlotState(JsonNode node) {
