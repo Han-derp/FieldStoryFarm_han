@@ -1,5 +1,6 @@
 package com.fieldstory.farm.controller;
 
+// 临时桩（dev 已删除本接口，D 正式接口为 model.GameClock；合并 dev 后删本 import 与 DemoClock 的 implements）
 import com.fieldstory.farm.manager.GameClock;
 import com.fieldstory.farm.manager.GameManager;
 import com.fieldstory.farm.manager.SceneManager;
@@ -12,6 +13,7 @@ import com.fieldstory.farm.model.Soil;
 import com.fieldstory.farm.model.SoilState;
 import com.fieldstory.farm.model.economy.PurchaseResult;
 import com.fieldstory.farm.model.impl.BasicFarm;
+import com.fieldstory.farm.model.impl.BasicGameClock;
 import com.fieldstory.farm.service.GrowthService;
 import com.fieldstory.farm.service.HarvestService;
 import com.fieldstory.farm.service.LandService;
@@ -44,8 +46,8 @@ import javafx.util.Duration;
  *
  * <p>雏形性质（往后正式交付后逐项替换）：
  * <ul>
- *   <li>{@link DemoClock}：恒为第 0 游戏日 0 时。
- *       TODO D 的正式 GameClock 接入后删除。</li>
+ *   <li>{@link DemoClock}：恒为第 0 游戏日 0 时（跨分支兼容：
+ *       继承 D 的 BasicGameClock 并实现旧桩，合并 dev 后删 implements 与旧 import）。</li>
  *   <li>演示生长 Timeline：每秒推进 2 游戏小时，遍历土地调用 A 的
  *       GrowthService 使作物成长（验收规范 §二十四公式）。
  *       TODO A/D 生长接线协商完成后删除。</li>
@@ -126,6 +128,8 @@ public final class FarmBootstrap {
         HarvestService harvestService = new BasicHarvestService(economy, landService);
 
         // A 的视图控制器（挂 CENTER）
+        // TODO 合并 dev 后：A 的 FarmViewController 构造器新增 GameClock 参数（共 6 参），
+        // 需在末尾补传 demoClock（届时删除此 TODO）。
         FarmViewController farmViewController = new FarmViewController(
                 farm, landService, plantingService, wateringService, harvestService);
         farmViewController.mountToScene();
@@ -235,9 +239,13 @@ public final class FarmBootstrap {
 
     /**
      * 演示时钟：恒为第 0 游戏日 0 时（满足 A 的 BasicPlantingService 播种时刻口径）。
-     * TODO D 的正式 GameClock（model 包）接入后删除本类。
+     *
+     * <p>跨分支兼容：dev 已删除临时桩 manager.GameClock，A 的 BasicPlantingService
+     * 改收 D 的正式接口 model.GameClock；本类同时继承 D 的 {@link BasicGameClock}
+     * （model.GameClock 实现）并实现旧桩接口，使本文件在合并前后均能编译。
+     * 合并 dev 后删除 implements 子句与 manager.GameClock 的 import 即可。
      */
-    private static final class DemoClock implements GameClock {
+    private static final class DemoClock extends BasicGameClock implements GameClock {
 
         @Override
         public int getGameDay() {
