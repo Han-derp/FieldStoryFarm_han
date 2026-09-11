@@ -58,40 +58,38 @@ public class FarmViewController {
     /** 浇水服务（A：三重校验 + 浇水计数） */
     private final WateringService wateringService;
 
-private final HarvestService harvestService;
-private final GameClock gameClock;
+    /** 收获服务（C：MATURE 收获，售价入账 + 土地回退） */
+    private final HarvestService harvestService;
+
+    /** 游戏时钟（D：当前游戏日，浇水/播种视图刷新基准） */
+    private final GameClock gameClock;
 
     /** 农场画布视图 */
     private final FarmView farmView;
 
     /**
-     * 装配视图与四个 Service（三个 A + 一个 C 收获）。
+     * 装配视图、四个 Service（三个 A + 一个 C 收获）与 D 的时钟。
      *
      * @param farm            农场模型
      * @param landService     开垦服务
      * @param plantingService 播种服务
      * @param wateringService 浇水服务
-public FarmViewController(
-        Farm farm,
-        LandService landService,
-        PlantingService plantingService,
-        WateringService wateringService,
-        HarvestService harvestService,
-        GameClock gameClock) {
+     * @param harvestService  收获服务
+     * @param gameClock       游戏时钟
+     */
+    public FarmViewController(
+            Farm farm,
+            LandService landService,
+            PlantingService plantingService,
+            WateringService wateringService,
+            HarvestService harvestService,
+            GameClock gameClock) {
         this.farm = farm;
         this.landService = landService;
         this.plantingService = plantingService;
         this.wateringService = wateringService;
-this.farm = farm;
-this.landService = landService;
-this.plantingService = plantingService;
-this.wateringService = wateringService;
-
-this.harvestService = harvestService;
-this.gameClock = gameClock;
-
-this.farmView = new FarmView(farm);
-this.farmView.setOnTileSelected(this::onTileSelected);
+        this.harvestService = harvestService;
+        this.gameClock = gameClock;
         this.farmView = new FarmView(farm);
         this.farmView.setOnTileSelected(this::onTileSelected);
     }

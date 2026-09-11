@@ -1,7 +1,6 @@
 package com.fieldstory.farm.controller;
 
-// 临时桩（dev 已删除本接口，D 正式接口为 model.GameClock；合并 dev 后删本 import 与 DemoClock 的 implements）
-import com.fieldstory.farm.manager.GameClock;
+import com.fieldstory.farm.model.GameClock;
 import com.fieldstory.farm.manager.GameManager;
 import com.fieldstory.farm.manager.SceneManager;
 import com.fieldstory.farm.model.Crop;
@@ -128,10 +127,8 @@ public final class FarmBootstrap {
         HarvestService harvestService = new BasicHarvestService(economy, landService);
 
         // A 的视图控制器（挂 CENTER）
-        // TODO 合并 dev 后：A 的 FarmViewController 构造器新增 GameClock 参数（共 6 参），
-        // 需在末尾补传 demoClock（届时删除此 TODO）。
         FarmViewController farmViewController = new FarmViewController(
-                farm, landService, plantingService, wateringService, harvestService);
+                farm, landService, plantingService, wateringService, harvestService, demoClock);
         farmViewController.mountToScene();
 
         // 临时商店面板（挂 RIGHT；TODO B 的商店视图交付后替换）
@@ -240,12 +237,10 @@ public final class FarmBootstrap {
     /**
      * 演示时钟：恒为第 0 游戏日 0 时（满足 A 的 BasicPlantingService 播种时刻口径）。
      *
-     * <p>跨分支兼容：dev 已删除临时桩 manager.GameClock，A 的 BasicPlantingService
-     * 改收 D 的正式接口 model.GameClock；本类同时继承 D 的 {@link BasicGameClock}
-     * （model.GameClock 实现）并实现旧桩接口，使本文件在合并前后均能编译。
-     * 合并 dev 后删除 implements 子句与 manager.GameClock 的 import 即可。
+     * <p>基于 D 的正式实现 {@link BasicGameClock}（model.GameClock 接口），
+     * 覆写游戏日/小时恒为 0。
      */
-    private static final class DemoClock extends BasicGameClock implements GameClock {
+    private static final class DemoClock extends BasicGameClock {
 
         @Override
         public int getGameDay() {
