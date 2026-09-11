@@ -223,12 +223,12 @@ public interface Crop {
     void setGrowthStage(GrowthStage growthStage);
     double getGrowthProgress();     // 0.0 ~ 100.0
     void setGrowthProgress(double growthProgress);
-    LocalDateTime getPlantWorldTime();
-    void setPlantWorldTime(LocalDateTime plantWorldTime);
+    long getPlantWorldTime();       // 游戏小时（决策 D14）
+    void setPlantWorldTime(long plantWorldTime);
     int getManualWaterCount();      // 0 ~ 5
     void setManualWaterCount(int manualWaterCount);
-    LocalDate getLastManualWaterGameDay();
-    void setLastManualWaterGameDay(LocalDate lastManualWaterGameDay);
+    long getLastManualWaterGameDay();   // 游戏日；-1 表示无浇水记录（决策 D14）
+    void setLastManualWaterGameDay(long lastManualWaterGameDay);
 }
 ```
 
@@ -292,7 +292,8 @@ public interface PlantingService {
 public PlantingResult plant(Soil soil, CropType type) {
     if (soil.getState() != SoilState.TILLED) return PlantingResult.NOT_TILLED;
     if (!economyService.consumeSeed(type, 1)) return PlantingResult.NO_SEED;  // 失败土地不动
-    Crop crop = cropFactory.create(type, gameClock.getWorldTime());
+    long plantWorldTime = gameClock.getGameDay() * 24L + gameClock.getGameHour(); // 决策 D14
+    Crop crop = cropFactory.create(type, plantWorldTime);
     soil.setCrop(crop);
     soil.setState(SoilState.PLANTED);
     return PlantingResult.SUCCESS;
@@ -344,10 +345,10 @@ private GrowthStage stageOf(double progress) {
 public interface WateringService {
 
     /** 三重校验：阶段∈{SPROUT,GROWING,MATURE} 且 当日未浇 且 count<5（D11） */
-    boolean canWater(Crop crop, LocalDate currentGameDay);
+    boolean canWater(Crop crop, long currentGameDay);
 
     /** 浇水：count+1（≤5）、记录当日；返回具体拒绝原因 */
-    WateringResult water(Crop crop, LocalDate currentGameDay);
+    WateringResult water(Crop crop, long currentGameDay);
 
     /** 成长加成：min(count×0.05, 0.20)（规则文档二十七） */
     double calculateWaterGrowthBonus(Crop crop);
@@ -357,10 +358,10 @@ public interface WateringService {
 `BasicWateringService` 实现要点：
 
 ```
-public WateringResult water(Crop crop, LocalDate currentGameDay) {
+public WateringResult water(Crop crop, long currentGameDay) {
     if (crop.getGrowthStage() == GrowthStage.SEED) return WateringResult.SEED_STAGE;
     if (crop.getManualWaterCount() >= MAX_MANUAL_WATER_COUNT) return WateringResult.WATER_LIMIT_REACHED;
-    if (currentGameDay.equals(crop.getLastManualWaterGameDay())) return WateringResult.ALREADY_WATERED_TODAY;
+    if (currentGameDay == crop.getLastManualWaterGameDay()) return WateringResult.ALREADY_WATERED_TODAY; // 决策 D14：long 比较
     crop.setManualWaterCount(crop.getManualWaterCount() + 1);
     crop.setLastManualWaterGameDay(currentGameDay);
     return WateringResult.SUCCESS;
@@ -396,8 +397,8 @@ public enum WateringResult {
 ```
 public class CropFactory {
 
-    /** 创建初始 Crop：SEED、progress=0、manualWaterCount=0、lastManualWaterGameDay=null */
-    public Crop create(CropType type, LocalDateTime plantWorldTime) {
+    /** 创建初始 Crop：SEED、progress=0、manualWaterCount=0、lastManualWaterGameDay=-1（决策 D14 哨兵） */
+    public Crop create(CropType type, long plantWorldTime) {
         Crop crop = new BasicCrop();
         crop.setCropUuid(UUID.randomUUID());
         crop.setCropType(type);
@@ -405,7 +406,7 @@ public class CropFactory {
         crop.setGrowthProgress(0.0);
         crop.setPlantWorldTime(plantWorldTime);
         crop.setManualWaterCount(0);
-        crop.setLastManualWaterGameDay(null);
+        crop.setLastManualWaterGameDay(-1L); // 决策 D14：-1 哨兵表示无浇水记录
         return crop;
     }
 }
@@ -481,12 +482,12 @@ package "model" {
         +setGrowthStage(stage : GrowthStage) : void
         +getGrowthProgress() : double
         +setGrowthProgress(progress : double) : void
-        +getPlantWorldTime() : LocalDateTime
-        +setPlantWorldTime(time : LocalDateTime) : void
+        +getPlantWorldTime() : long
+        +setPlantWorldTime(time : long) : void
         +getManualWaterCount() : int
         +setManualWaterCount(count : int) : void
-        +getLastManualWaterGameDay() : LocalDate
-        +setLastManualWaterGameDay(day : LocalDate) : void
+        +getLastManualWaterGameDay() : long
+        +setLastManualWaterGameDay(day : long) : void
     }
     enum FarmPlot {
         FARM_PLOT
@@ -539,8 +540,8 @@ package "service" {
         +applyGrowth(crop : Crop, elapsedGameDays : double) : void
     }
     interface WateringService {
-        +canWater(crop : Crop, currentGameDay : LocalDate) : boolean
-        +water(crop : Crop, currentGameDay : LocalDate) : WateringResult
+        +canWater(crop : Crop, currentGameDay : long) : boolean
+        +water(crop : Crop, currentGameDay : long) : WateringResult
         +calculateWaterGrowthBonus(crop : Crop) : double
     }
     enum ReclaimResult {
@@ -570,7 +571,7 @@ package "service.impl" {
 
 package "factory" {
     class CropFactory {
-        +create(type : CropType, plantWorldTime : LocalDateTime) : Crop
+        +create(type : CropType, plantWorldTime : long) : Crop
     }
 }
 
@@ -612,7 +613,7 @@ BasicCrop --> GrowthStage
 BasicLandService ..> EconomyService : canAfford(5)/spendGold(5)
 BasicPlantingService ..> EconomyService : hasSeed/consumeSeed
 BasicPlantingService ..> CropFactory
-BasicPlantingService ..> GameClock : getWorldTime()
+BasicPlantingService ..> GameClock : getGameDay()/getGameHour()
 BasicGrowthService ..> WateringService : calculateWaterGrowthBonus()
 BasicHarvestService ..> LandService : removeCropAndSetTilled()
 BasicHarvestService ..> EconomyService : 售价/入账
@@ -644,7 +645,7 @@ C 的 `BasicHarvestService` 收获流程调用我方 `LandService.removeCrop
 
 |消费|用途|
 |---|---|
-|`GameClock.getWorldTime()`|播种时间戳（验收规范二十）|
+|`GameClock.getGameDay()`/`getGameHour()`|播种时间戳 plantWorldTime（决策 D14）|
 |`GameClock.getGameDay()`|浇水当日判断（由调用方传入 water 方法）|
 
 D 需提供 `TestGameClock` 供我方单测（规则文档八）。
@@ -667,7 +668,7 @@ Controller → farm.getSoil(row, col)          // null → 非 FarmPlot，UI 直
 ### 13.2 播种
 
 ```
-Controller → plantingService.canPlant(soil, type)   // TILLED 且 hasSeed(type, 1)          → plantingService.plant(soil, type)              → economyService.consumeSeed(type, 1) // 失败 → NO_SEED，土地不动              → cropFactory.create(type, gameClock.getWorldTime())              → soil.setCrop(crop); soil.setState(PLANTED)
+Controller → plantingService.canPlant(soil, type)   // TILLED 且 hasSeed(type, 1)          → plantingService.plant(soil, type)              → economyService.consumeSeed(type, 1) // 失败 → NO_SEED，土地不动              → cropFactory.create(type, gameClock.getGameDay()*24L+gameClock.getGameHour()) → soil.setCrop(crop); soil.setState(PLANTED)
 ```
 
 ### 13.3 成长
@@ -679,7 +680,7 @@ Controller → plantingService.canPlant(soil, type)   // TILLED 且 hasSeed(type
 ### 13.4 浇水
 
 ```
-Controller → wateringService.water(crop, gameClock.getGameDay())    → SEED → SEED_STAGE（验收规范二十六）    → count ≥ 5 → WATER_LIMIT_REACHED（验收规范二十八、D11）    → 当日已浇 → ALREADY_WATERED_TODAY（验收规范二十七、二十九）    → 通过 → count+1、记录当日；加成 = min(count×5%, 20%)
+Controller → wateringService.water(crop, (long) gameClock.getGameDay()) → SEED → SEED_STAGE（验收规范二十六）    → count ≥ 5 → WATER_LIMIT_REACHED（验收规范二十八、D11）    → 当日已浇 → ALREADY_WATERED_TODAY（验收规范二十七、二十九）    → 通过 → count+1、记录当日；加成 = min(count×5%, 20%)
 ```
 
 ### 13.5 收获（C 主导，A 提供土地回退）
@@ -761,10 +762,10 @@ boolean canPlant(Soil soil, CropType type);
 PlantingResult plant(Soil soil, CropType type);
 double calculateGrowthDelta(Crop crop, double elapsedGameDays);
 void applyGrowth(Crop crop, double elapsedGameDays);
-boolean canWater(Crop crop, LocalDate currentGameDay);
-WateringResult water(Crop crop, LocalDate currentGameDay);
+boolean canWater(Crop crop, long currentGameDay);
+WateringResult water(Crop crop, long currentGameDay);
 double calculateWaterGrowthBonus(Crop crop);
-Crop create(CropType type, LocalDateTime plantWorldTime);
+Crop create(CropType type, long plantWorldTime);
 
 // A 消费（B 提供，已确认）
 boolean canAfford(int amount);
@@ -773,8 +774,8 @@ boolean hasSeed(CropType type, int quantity);
 boolean consumeSeed(CropType type, int quantity);
 
 // A 消费（D 提供）
-LocalDateTime getWorldTime();
-LocalDate getGameDay();
+int getGameDay();
+int getGameHour();
 ```
 
 接口确定后，A 模块内部实现（Basic 前缀实现类）不应随意修改上述方法签名；P1/P2 扩展（天气倍率、装饰 Buff、枯萎）通过实现类内部演进与枚举占位承接，不推翻 P0 接口。

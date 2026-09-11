@@ -436,6 +436,8 @@ FarmScore = 147。
 | D11 | 浇水第6次行为与提示 | manualWaterCount≥5 后 canWater 直接返回 false（第5次仍有效，成长加成维持 +20% 封顶）；UI 提示建议“这株作物已经不需要浇水了” | 验收规范二十七、二十八；规则文档二十四 |  | 无（UI 文案为团队约定） |
 | D12 | CropType 数值来源 | P0 枚举硬编码（字段结构与 crop-config.json 对齐：cropType/baseGrowthDays/seedPrice/baseSellPrice）；配置加载时点后移，不晚于 P1 商店上线，由 E 提供 JsonConfigLoader 后切换 | 验收规范十七；决策 D01；脚手架第八节 |  | 决策记录；加载时点由 E 后续决策 |
 | D13 | model 实现类包位置 | 接口在包根，实现类以 Basic 前缀放 impl 子包（model.impl 与 service.impl 对称）；枚举不拆接口；E 注意 module-info 为 model.impl 增加对 Jackson 的 opens | 脚手架第七节；决策 D03 |  | 脚手架第七节或工程开发规范（待创建） |
+| D14 | 时间类型与浇水哨兵 | A 侧时间字段统一 long：plantWorldTime=long 游戏小时（由 GameClock.getGameDay()×24+getGameHour() 适配计算）；lastManualWaterGameDay=long 游戏日（int 拓宽）。D 的 GameClock 无需新增 getWorldTime()。BasicCrop 字段默认 -1 哨兵（模型层兜底）+ CropFactory 显式设置 + E 适配层反序列化"无浇水记录"必须映射 -1 | 验收规范§八、§十七、§十八；规则文档§六；A 设计文档§7.3/§8.4/§9 |  | A 设计文档§7.3/§8.4/§9/§10/§11；通知 D（zsl）、E（hyt） |
+| D15 | 世界时间存档字段名与类型 | 以 E 模块 GameState.currentWorldTime（String，ISO-8601）为唯一存档字段；D 模块仅通过 FarmGameModel.getWorldTimeTotalMinutes() 提供 int 值、restoreWorldTime(int) 接收，不直接读写 JSON 字段 | 验收规范 §41；E 模块文档 §3.1/D1；D 模块文档 §9.1/§11.2 |  | D 模块文档 §1.4/§9.1/§9.2/§9.3/§11.2/附录清单 |
 
 # 遗留问题
 
