@@ -1,41 +1,37 @@
 package com.fieldstory.farm.testutil;
 
-import com.fieldstory.farm.manager.GameClock;
+import com.fieldstory.farm.model.GameClock;
+import com.fieldstory.farm.model.impl.BasicGameClock;
+
+import static com.fieldstory.farm.util.GameConstants.MINUTES_PER_DAY;
 
 /**
- * {@link GameClock} 测试桩（《D模块 P0 接口与类设计文档》§1.2 签名子集）。
- *
- * <p>A 模块设计文档 §12.3 约定 D 提供 TestGameClock 供我方单测；
- * D 交付前由本桩代行，随 {@code manager.GameClock} 临时桩一并删除/切换。
+ * {@link GameClock} 测试桩：基于 D 模块正式实现 {@link BasicGameClock}，
+ * 仅补充播种时刻计算单测所需的 set 辅助方法。
  *
  * <p>gameDay / gameHour 均可 set，供播种时刻计算单测使用
- * （plantWorldTime = gameDay × 24 + gameHour，决策 D14）。
+ * （plantWorldTime = gameDay × 24 + gameHour，决策 D14）；
+ * 正式接口 11 个方法由 {@link BasicGameClock} 天然满足，本类无需覆写。
  */
-public class TestGameClock implements GameClock {
+public class TestGameClock extends BasicGameClock {
 
-    /** 当前游戏日（可 set） */
-    private int gameDay;
-
-    /** 当前游戏小时（可 set） */
-    private int gameHour;
-
-    /** 设置当前游戏日（测试用）。 */
+    /**
+     * 设置当前游戏日（测试用），保留当日小时与分钟。
+     *
+     * @param gameDay 目标游戏日（≥1）
+     */
     public void setGameDay(int gameDay) {
-        this.gameDay = gameDay;
+        setTotalMinutes((gameDay - 1) * MINUTES_PER_DAY
+                + getTotalMinutes() % MINUTES_PER_DAY);
     }
 
-    /** 设置当前游戏小时（测试用）。 */
+    /**
+     * 设置当前游戏小时（测试用），保留游戏日与分钟。
+     *
+     * @param gameHour 目标小时（0~23）
+     */
     public void setGameHour(int gameHour) {
-        this.gameHour = gameHour;
-    }
-
-    @Override
-    public int getGameDay() {
-        return gameDay;
-    }
-
-    @Override
-    public int getGameHour() {
-        return gameHour;
+        setTotalMinutes((getGameDay() - 1) * MINUTES_PER_DAY
+                + gameHour * 60 + getTotalMinutes() % 60);
     }
 }

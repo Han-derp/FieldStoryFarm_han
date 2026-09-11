@@ -1,9 +1,9 @@
 package com.fieldstory.farm.service.impl;
 
 import com.fieldstory.farm.factory.CropFactory;
-import com.fieldstory.farm.manager.GameClock;
 import com.fieldstory.farm.model.Crop;
 import com.fieldstory.farm.model.CropType;
+import com.fieldstory.farm.model.GameClock;
 import com.fieldstory.farm.model.Soil;
 import com.fieldstory.farm.model.SoilState;
 import com.fieldstory.farm.service.PlantingResult;
@@ -24,7 +24,7 @@ import com.fieldstory.farm.service.economy.EconomyService;
  * （验收规范 §二十 plantWorldTime 字段）。
  *
  * <p>种子库存变化统一走 EconomyService、不直接操作 Player 模型（跨模块契约）；
- * 播种时刻来自构造器注入的 {@link GameClock} 临时桩（D 交付后切换正式实现），
+ * 播种时刻来自构造器注入的 {@link GameClock}（使用 D 正式接口），
  * 本实现不使用系统时间、不使用随机数。
  */
 public class BasicPlantingService implements PlantingService {
@@ -35,7 +35,7 @@ public class BasicPlantingService implements PlantingService {
     /** 经济服务：播种经统一经济入口消耗种子（B 文档 §17.2、§23 冻结表；决策 D08） */
     private final EconomyService economyService;
 
-    /** 游戏时钟（manager 包临时桩，D 交付后删除本文件并切换正式接口） */
+    /** 游戏时钟（使用 D 正式接口） */
     private final GameClock gameClock;
 
     /**
