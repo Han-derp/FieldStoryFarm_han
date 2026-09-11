@@ -2,6 +2,7 @@ package com.fieldstory.farm.view;
 
 import com.fieldstory.farm.model.FarmGameModel;
 import com.fieldstory.farm.model.GameClock;
+import com.fieldstory.farm.model.Player;
 import com.fieldstory.farm.model.WeatherState;
 import com.fieldstory.farm.model.WeatherType;
 import com.fieldstory.farm.service.WeatherService;
@@ -29,6 +30,9 @@ public class StatusView extends HBox {
     /** 天气状态（只读，可为 null）。 */
     private final WeatherState weatherState;
 
+    /** 玩家（只读，可为 null；用于显示金币，B 模块数据）。 */
+    private final Player player;
+
     private final Label dayLabel;
     private final Label timeLabel;
     private final Label goldLabel;
@@ -46,6 +50,18 @@ public class StatusView extends HBox {
     }
 
     /**
+     * 注入模型与玩家，初始化 UI 组件并调用 {@link #update()}。
+     *
+     * <p>用于显示金币（B 模块 {@link Player} 数据）；天气显示固定「晴天」。
+     *
+     * @param model  游戏模型
+     * @param player 玩家（可为 null，此时金币显示占位「金币 --」）
+     */
+    public StatusView(FarmGameModel model, Player player) {
+        this(model, null, null, player);
+    }
+
+    /**
      * 注入模型与天气服务，初始化 UI 组件并调用 {@link #update()}。
      *
      * @param model          游戏模型
@@ -53,9 +69,23 @@ public class StatusView extends HBox {
      * @param weatherState   天气状态（可为 null）
      */
     public StatusView(FarmGameModel model, WeatherService weatherService, WeatherState weatherState) {
+        this(model, weatherService, weatherState, null);
+    }
+
+    /**
+     * 注入模型、天气服务与玩家，初始化 UI 组件并调用 {@link #update()}。
+     *
+     * @param model          游戏模型
+     * @param weatherService 天气服务（只读查询，可为 null）
+     * @param weatherState   天气状态（可为 null）
+     * @param player         玩家（可为 null，此时金币显示占位「金币 --」）
+     */
+    public StatusView(FarmGameModel model, WeatherService weatherService,
+                      WeatherState weatherState, Player player) {
         this.model = model;
         this.weatherService = weatherService;
         this.weatherState = weatherState;
+        this.player = player;
         this.dayLabel = new Label();
         this.timeLabel = new Label();
         this.goldLabel = new Label();
@@ -72,7 +102,7 @@ public class StatusView extends HBox {
         GameClock clock = model.getGameClock();
         dayLabel.setText("第 " + clock.getGameDay() + " 天");
         timeLabel.setText(getDaytimeIcon() + " " + clock.getTimeString());
-        goldLabel.setText("金币 --");
+        goldLabel.setText(player == null ? "金币 --" : "金币 " + player.getGold());
         weatherLabel.setText(buildWeatherText());
     }
 

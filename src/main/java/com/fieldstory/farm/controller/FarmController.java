@@ -26,6 +26,10 @@ import static com.fieldstory.farm.util.GameConstants.GAME_DAYS_PER_TICK;
  * A 负责"怎么成长"。本类在每次 tick 后按经过游戏天数遍历当前 Farm 的作物，
  * 调用 A 模块 {@link GrowthService#applyGrowth(Crop, double)}；
  * 成长公式不在本类重复实现。
+ *
+ * <p><b>跨天回调（A 模块 GrowthService 接入点）：</b>主循环检测到游戏日递增时，
+ * 触发 {@link #setOnDayChanged(Runnable)} 注入的回调，供装配层协调 A 模块按「天」推进成长
+ * （验收规范 §3.1「生长由 Controller 协调」的落实）。
  */
 public class FarmController {
 
@@ -41,13 +45,37 @@ public class FarmController {
     private final Timeline gameLoopTimeline;
 
     /**
+     * 跨天回调（A 模块 GrowthService 的接入点，验收规范 §3.1）。
+     *
+     * <p>默认空实现；由装配层通过 {@link #setOnDayChanged(Runnable)} 注入。
+     * 每次游戏日递增时触发一次，用于协调 A 模块按「天」推进作物成长。
+     */
+    private Runnable onDayChanged = () -> {};
+
+    /** 上一次观察到的游戏日；-1 表示尚未初始化（首个 tick 只记录、不触发回调）。 */
+    private int lastGameDay = -1;
+
+    /**
      * 注入模型和视图，初始化定时器（不协调成长，向后兼容）。
      *
      * @param model      游戏模型
      * @param statusView 状态栏视图
      */
     public FarmController(FarmGameModel model, StatusView statusView) {
-        this(model, statusView, null);
+        this(model, statusView, (GrowthService) null);
+    }
+
+    /**
+     * 注入模型、视图与跨天回调，初始化定时器。
+     *
+     * @param model         游戏模型
+     * @param statusView    状态栏视图
+     * @param onDayChanged  跨天回调（A 模块 GrowthService 接入点），可为 null（忽略）
+     */
+    public FarmController(FarmGameModel model, StatusView statusView,
+                          Runnable onDayChanged) {
+        this(model, statusView, (GrowthService) null);
+        setOnDayChanged(onDayChanged);
     }
 
     /**
@@ -77,13 +105,29 @@ public class FarmController {
      * @return 已配置的定时器
      */
     private Timeline initGameLoop() {
-        Timeline timeline = new Timeline(new KeyFrame(Duration.seconds(1), e -> {
-            model.tick();
-            advanceCrops();
-            statusView.update();
-        }));
+        Timeline timeline = new Timeline(new KeyFrame(Duration.seconds(1), e -> handleTick()));
         timeline.setCycleCount(Timeline.INDEFINITE);
         return timeline;
+    }
+
+    /**
+     * 执行一次主循环 tick：推进时间 → 检测跨天并触发回调 → 协调成长 → 刷新视图。
+     *
+     * <p>抽为包级方法便于单元测试（Timeline 的 KeyFrame 处理器直接调用本方法）。
+     * 首个 tick 只记录当前游戏日（{@code lastGameDay < 0}），不触发回调；
+     * 之后仅当游戏日严格递增时触发一次 {@link #setOnDayChanged(Runnable)} 回调。
+     */
+    void handleTick() {
+        model.tick();
+        int day = model.getGameClock().getGameDay();
+        if (lastGameDay < 0) {
+            lastGameDay = day;
+        } else if (day > lastGameDay) {
+            lastGameDay = day;
+            onDayChanged.run();
+        }
+        advanceCrops();
+        statusView.update();
     }
 
     /**
@@ -140,5 +184,19 @@ public class FarmController {
      */
     public void stopGameLoop() {
         gameLoopTimeline.pause();
+    }
+
+    /**
+     * 设置跨天回调（A 模块 GrowthService 的接入点，验收规范 §3.1）。
+     *
+     * <p>每次游戏日递增时触发一次。参数为 null 时忽略（保持原回调不变，防御式）。
+     *
+     * @param onDayChanged 跨天回调，可为 null（忽略）
+     */
+    public void setOnDayChanged(Runnable onDayChanged) {
+        if (onDayChanged == null) {
+            return;
+        }
+        this.onDayChanged = onDayChanged;
     }
 }

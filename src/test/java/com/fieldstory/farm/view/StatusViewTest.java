@@ -2,6 +2,7 @@ package com.fieldstory.farm.view;
 
 import com.fieldstory.farm.model.FarmGameModel;
 import com.fieldstory.farm.model.GameClock;
+import com.fieldstory.farm.model.Player;
 import com.fieldstory.farm.model.WeatherType;
 import com.fieldstory.farm.model.impl.BasicGameClock;
 import com.fieldstory.farm.model.impl.BasicWeatherState;
@@ -93,6 +94,40 @@ class StatusViewTest {
         String gold = onFxThread(() -> {
             FarmGameModel model = new FarmGameModel();
             StatusView view = new StatusView(model);
+            return view.getGoldText();
+        });
+        assertEquals("金币 --", gold);
+    }
+
+    @Test
+    void goldLabelShowsPlayerGold() throws InterruptedException {
+        String gold = onFxThread(() -> {
+            FarmGameModel model = new FarmGameModel();
+            Player player = new Player("测试", 500);
+            StatusView view = new StatusView(model, player);
+            return view.getGoldText();
+        });
+        assertEquals("金币 500", gold);
+    }
+
+    @Test
+    void goldLabelReflectsPlayerGoldChange() throws InterruptedException {
+        String gold = onFxThread(() -> {
+            FarmGameModel model = new FarmGameModel();
+            Player player = new Player("测试", 500);
+            StatusView view = new StatusView(model, player);
+            player.setGold(123);
+            view.update();
+            return view.getGoldText();
+        });
+        assertEquals("金币 123", gold);
+    }
+
+    @Test
+    void goldLabelShowsPlaceholderWhenPlayerNull() throws InterruptedException {
+        String gold = onFxThread(() -> {
+            FarmGameModel model = new FarmGameModel();
+            StatusView view = new StatusView(model, (Player) null);
             return view.getGoldText();
         });
         assertEquals("金币 --", gold);
