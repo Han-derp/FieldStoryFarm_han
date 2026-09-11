@@ -6,31 +6,26 @@ import com.fieldstory.farm.model.Player;
 import com.fieldstory.farm.model.WeatherState;
 import com.fieldstory.farm.model.WeatherType;
 import com.fieldstory.farm.service.WeatherService;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 
 /**
- * 顶部状态栏视图（D 模块 P0：世界环境；P1 升级天气显示）。
+ * 顶部状态栏视图。
  *
- * <p>依据《D模块 P0 接口与类设计文档》§五、《D模块 P1 接口与类设计文档》§4.7、
- * 《P0-P4功能实现与验收规范》§36/§76。
- *
- * <p>显示：游戏日、游戏时间、金币、天气（P1 升级为「图标 + 显示名」）。
- * 只读原则：只能通过 Getter 读取数据，不得调用任何 Service 写方法（验收 §3.1）；
- * 天气只调用 {@link WeatherService} 的查询方法，不得调用 {@code rollDailyWeather}。
+ * <p>右上角两个按钮：📦 仓库（左）、🏪 商城（右）。
  */
 public class StatusView extends HBox {
 
-    /** 数据来源（只读）。 */
+    private static final String WAREHOUSE_ICON_PATH = "/assets/icon/warehouse_button.png";
+    private static final String SHOP_ICON_PATH = "/assets/icon/shop_button.png";
+    private static final double ICON_SIZE = 72.0;
+
     private final FarmGameModel model;
-
-    /** 天气服务（只读查询，可为 null）。 */
     private final WeatherService weatherService;
-
-    /** 天气状态（只读，可为 null）。 */
     private final WeatherState weatherState;
-
-    /** 玩家（只读，可为 null；用于显示金币，B 模块数据）。 */
     private final Player player;
 
     private final Label dayLabel;
@@ -38,66 +33,106 @@ public class StatusView extends HBox {
     private final Label goldLabel;
     private final Label weatherLabel;
 
-    /**
-     * 注入模型，初始化 UI 组件并调用 {@link #update()}。
-     *
-     * <p>P0 兼容构造：无天气服务时天气显示固定「晴天」（P0 固定晴天语义，验收规范 §七十六）。
-     *
-     * @param model 游戏模型
-     */
+    private final Button warehouseButton;
+    private final Button shopButton;
+
     public StatusView(FarmGameModel model) {
         this(model, null, null);
     }
 
-    /**
-     * 注入模型与玩家，初始化 UI 组件并调用 {@link #update()}。
-     *
-     * <p>用于显示金币（B 模块 {@link Player} 数据）；天气显示固定「晴天」。
-     *
-     * @param model  游戏模型
-     * @param player 玩家（可为 null，此时金币显示占位「金币 --」）
-     */
     public StatusView(FarmGameModel model, Player player) {
         this(model, null, null, player);
     }
 
-    /**
-     * 注入模型与天气服务，初始化 UI 组件并调用 {@link #update()}。
-     *
-     * @param model          游戏模型
-     * @param weatherService 天气服务（只读查询，可为 null）
-     * @param weatherState   天气状态（可为 null）
-     */
     public StatusView(FarmGameModel model, WeatherService weatherService, WeatherState weatherState) {
         this(model, weatherService, weatherState, null);
     }
 
-    /**
-     * 注入模型、天气服务与玩家，初始化 UI 组件并调用 {@link #update()}。
-     *
-     * @param model          游戏模型
-     * @param weatherService 天气服务（只读查询，可为 null）
-     * @param weatherState   天气状态（可为 null）
-     * @param player         玩家（可为 null，此时金币显示占位「金币 --」）
-     */
     public StatusView(FarmGameModel model, WeatherService weatherService,
                       WeatherState weatherState, Player player) {
         this.model = model;
         this.weatherService = weatherService;
         this.weatherState = weatherState;
         this.player = player;
+
         this.dayLabel = new Label();
         this.timeLabel = new Label();
         this.goldLabel = new Label();
         this.weatherLabel = new Label();
-        this.setSpacing(16);
-        this.getChildren().addAll(dayLabel, timeLabel, goldLabel, weatherLabel);
+        this.warehouseButton = createIconButton("📦", WAREHOUSE_ICON_PATH);
+        this.shopButton = createIconButton("🏪", SHOP_ICON_PATH);
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        this.setSpacing(12);
+        this.getChildren().addAll(
+                dayLabel, timeLabel, goldLabel, weatherLabel,
+                spacer, warehouseButton, shopButton);
+
         update();
     }
 
     /**
-     * 刷新显示（由 Controller 定时调用，每秒一次，规则 §5.1）。
+     * 图标按钮：优先加载贴图；缺失时降级为 emoji 文字按钮。
      */
+    private Button createIconButton(String fallbackText, String iconPath) {
+        Button button = new Button();
+        button.setStyle(
+                "-fx-background-color: transparent;"
+                        + "-fx-border-color: transparent;"
+                        + "-fx-padding: 0;"
+                        + "-fx-cursor: hand;"
+        );
+        button.setMinSize(ICON_SIZE, ICON_SIZE);
+        button.setPrefSize(ICON_SIZE, ICON_SIZE);
+        button.setMaxSize(ICON_SIZE, ICON_SIZE);
+
+        javafx.scene.image.Image icon = loadIcon(iconPath);
+        if (icon != null) {
+            javafx.scene.image.ImageView iv = new javafx.scene.image.ImageView(icon);
+            iv.setFitWidth(ICON_SIZE);
+            iv.setFitHeight(ICON_SIZE);
+            iv.setPreserveRatio(true);
+            iv.setSmooth(false);
+            button.setGraphic(iv);
+        } else {
+            button.setText(fallbackText);
+            button.setStyle(
+                    "-fx-background-color: #A97850;"
+                            + "-fx-background-radius: 16;"
+                            + "-fx-text-fill: #FFF3DD;"
+                            + "-fx-font-size: 32;"
+                            + "-fx-min-width: 72;"
+                            + "-fx-min-height: 72;"
+            );
+        }
+
+        button.setOnMouseEntered(e -> {
+            button.setScaleX(1.08);
+            button.setScaleY(1.08);
+            button.setOpacity(0.85);
+        });
+        button.setOnMouseExited(e -> {
+            button.setScaleX(1.0);
+            button.setScaleY(1.0);
+            button.setOpacity(1.0);
+        });
+        return button;
+    }
+
+    private static javafx.scene.image.Image loadIcon(String path) {
+        try (var in = StatusView.class.getResourceAsStream(path)) {
+            if (in == null) {
+                return null;
+            }
+            javafx.scene.image.Image img = new javafx.scene.image.Image(in);
+            return img.isError() ? null : img;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
     public void update() {
         GameClock clock = model.getGameClock();
         dayLabel.setText("第 " + clock.getGameDay() + " 天");
@@ -106,14 +141,6 @@ public class StatusView extends HBox {
         weatherLabel.setText(buildWeatherText());
     }
 
-    /**
-     * 构造天气显示文本「图标 + 显示名」。
-     *
-     * <p>NPE 保护：{@code weatherService} 或 {@code weatherState} 为 null 时显示占位，
-     * 不抛异常（非功能需求 §2.2）。
-     *
-     * @return 天气显示文本
-     */
     private String buildWeatherText() {
         if (weatherService == null || weatherState == null) {
             return "晴天";
@@ -125,32 +152,32 @@ public class StatusView extends HBox {
         return weatherService.getIcon(type) + " " + weatherService.getDisplayName(type);
     }
 
-    /**
-     * 根据 {@code isDaytime()} 返回白天/夜晚图标。
-     *
-     * @return 白天返回太阳图标，否则返回月亮图标
-     */
     private String getDaytimeIcon() {
         return model.getGameClock().isDaytime() ? "\u2600" : "\uD83C\uDF19";
     }
 
-    /** 供测试读取游戏日文本。 */
-    public String getDayText() {
-        return dayLabel.getText();
+    public String getDayText() { return dayLabel.getText(); }
+    public String getTimeText() { return timeLabel.getText(); }
+    public String getGoldText() { return goldLabel.getText(); }
+    public String getWeatherText() { return weatherLabel.getText(); }
+
+    public void setOnWarehouseButtonClick(Runnable action) {
+        warehouseButton.setOnAction(e -> {
+            if (action != null) {
+                action.run();
+            }
+        });
     }
 
-    /** 供测试读取时间文本。 */
-    public String getTimeText() {
-        return timeLabel.getText();
+    public Button getWarehouseButton() { return warehouseButton; }
+
+    public void setOnShopButtonClick(Runnable action) {
+        shopButton.setOnAction(e -> {
+            if (action != null) {
+                action.run();
+            }
+        });
     }
 
-    /** 供测试读取金币文本。 */
-    public String getGoldText() {
-        return goldLabel.getText();
-    }
-
-    /** 供测试读取天气文本。 */
-    public String getWeatherText() {
-        return weatherLabel.getText();
-    }
+    public Button getShopButton() { return shopButton; }
 }
