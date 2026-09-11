@@ -59,28 +59,18 @@ class FarmGameModelTest {
     /** 最小 Farm 桩，仅用于验证字段类型为 A 的 Farm 接口（裁决 ①）。 */
     private static final class StubFarm implements Farm {
         @Override
-        public int getWidth() {
-            return 12;
-        }
-
-        @Override
-        public int getHeight() {
-            return 12;
-        }
-
-        @Override
-        public FarmPlot getPlot(int row, int col) {
+        public FarmPlot getPlotType(int row, int column) {
             return FarmPlot.FARM_PLOT;
         }
 
         @Override
-        public Soil getSoil(int row, int col) {
+        public Soil getSoil(int row, int column) {
             return null;
         }
 
         @Override
-        public boolean isFarmPlot(int row, int col) {
-            return true;
+        public java.util.List<Soil> getSoils() {
+            return java.util.List.of();
         }
     }
 }

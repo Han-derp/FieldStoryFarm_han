@@ -2,21 +2,32 @@ package com.fieldstory.farm.view;
 
 import com.fieldstory.farm.model.FarmGameModel;
 import com.fieldstory.farm.model.GameClock;
+import com.fieldstory.farm.model.WeatherState;
+import com.fieldstory.farm.model.WeatherType;
+import com.fieldstory.farm.service.WeatherService;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
 
 /**
- * 顶部状态栏视图（D 模块 P0：世界环境）。
+ * 顶部状态栏视图（D 模块 P0：世界环境；P1 升级天气显示）。
  *
- * <p>依据《D模块 P0 接口与类设计文档》§五、《P0-P4功能实现与验收规范》§36/§76。
+ * <p>依据《D模块 P0 接口与类设计文档》§五、《D模块 P1 接口与类设计文档》§4.7、
+ * 《P0-P4功能实现与验收规范》§36/§76。
  *
- * <p>显示：游戏日、游戏时间、金币、天气（P1 预留，P0 固定"晴天"）。
- * 只读原则：只能通过 Getter 读取数据，不得调用任何 Service 写方法（验收 §3.1）。
+ * <p>显示：游戏日、游戏时间、金币、天气（P1 升级为「图标 + 显示名」）。
+ * 只读原则：只能通过 Getter 读取数据，不得调用任何 Service 写方法（验收 §3.1）；
+ * 天气只调用 {@link WeatherService} 的查询方法，不得调用 {@code rollDailyWeather}。
  */
 public class StatusView extends HBox {
 
     /** 数据来源（只读）。 */
     private final FarmGameModel model;
+
+    /** 天气服务（只读查询，可为 null）。 */
+    private final WeatherService weatherService;
+
+    /** 天气状态（只读，可为 null）。 */
+    private final WeatherState weatherState;
 
     private final Label dayLabel;
     private final Label timeLabel;
@@ -26,10 +37,25 @@ public class StatusView extends HBox {
     /**
      * 注入模型，初始化 UI 组件并调用 {@link #update()}。
      *
+     * <p>P0 兼容构造：无天气服务时天气显示固定「晴天」（P0 固定晴天语义，验收规范 §七十六）。
+     *
      * @param model 游戏模型
      */
     public StatusView(FarmGameModel model) {
+        this(model, null, null);
+    }
+
+    /**
+     * 注入模型与天气服务，初始化 UI 组件并调用 {@link #update()}。
+     *
+     * @param model          游戏模型
+     * @param weatherService 天气服务（只读查询，可为 null）
+     * @param weatherState   天气状态（可为 null）
+     */
+    public StatusView(FarmGameModel model, WeatherService weatherService, WeatherState weatherState) {
         this.model = model;
+        this.weatherService = weatherService;
+        this.weatherState = weatherState;
         this.dayLabel = new Label();
         this.timeLabel = new Label();
         this.goldLabel = new Label();
@@ -47,7 +73,26 @@ public class StatusView extends HBox {
         dayLabel.setText("第 " + clock.getGameDay() + " 天");
         timeLabel.setText(getDaytimeIcon() + " " + clock.getTimeString());
         goldLabel.setText("金币 --");
-        weatherLabel.setText("晴天");
+        weatherLabel.setText(buildWeatherText());
+    }
+
+    /**
+     * 构造天气显示文本「图标 + 显示名」。
+     *
+     * <p>NPE 保护：{@code weatherService} 或 {@code weatherState} 为 null 时显示占位，
+     * 不抛异常（非功能需求 §2.2）。
+     *
+     * @return 天气显示文本
+     */
+    private String buildWeatherText() {
+        if (weatherService == null || weatherState == null) {
+            return "晴天";
+        }
+        WeatherType type = weatherState.getWeatherType();
+        if (type == null) {
+            return "晴天";
+        }
+        return weatherService.getIcon(type) + " " + weatherService.getDisplayName(type);
     }
 
     /**

@@ -2,7 +2,10 @@ package com.fieldstory.farm.view;
 
 import com.fieldstory.farm.model.FarmGameModel;
 import com.fieldstory.farm.model.GameClock;
+import com.fieldstory.farm.model.WeatherType;
 import com.fieldstory.farm.model.impl.BasicGameClock;
+import com.fieldstory.farm.model.impl.BasicWeatherState;
+import com.fieldstory.farm.service.impl.BasicWeatherService;
 import javafx.application.Platform;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -93,6 +96,41 @@ class StatusViewTest {
             return view.getGoldText();
         });
         assertEquals("金币 --", gold);
+    }
+
+    @Test
+    void weatherShowsIconAndDisplayName() throws InterruptedException {
+        String weather = onFxThread(() -> {
+            FarmGameModel model = new FarmGameModel();
+            BasicWeatherState state = new BasicWeatherState(WeatherType.RAIN, 3);
+            BasicWeatherService service = new BasicWeatherService(state);
+            StatusView view = new StatusView(model, service, state);
+            return view.getWeatherText();
+        });
+        assertEquals("\uD83C\uDF27 雨天", weather);
+    }
+
+    @Test
+    void weatherFallsBackToSunnyWhenStateNull() throws InterruptedException {
+        String weather = onFxThread(() -> {
+            FarmGameModel model = new FarmGameModel();
+            StatusView view = new StatusView(model, null, null);
+            return view.getWeatherText();
+        });
+        assertEquals("晴天", weather);
+    }
+
+    @Test
+    void weatherFallsBackToSunnyWhenTypeNull() throws InterruptedException {
+        String weather = onFxThread(() -> {
+            FarmGameModel model = new FarmGameModel();
+            BasicWeatherState state = new BasicWeatherState();
+            state.setWeatherType(null);
+            BasicWeatherService service = new BasicWeatherService(state);
+            StatusView view = new StatusView(model, service, state);
+            return view.getWeatherText();
+        });
+        assertEquals("晴天", weather);
     }
 
     /** 可抛异常的取值函数。 */
