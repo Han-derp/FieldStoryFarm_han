@@ -236,21 +236,27 @@ public final class DecorationOverlayView
             return;
         }
 
-        double x =
-                decoration.getColumn()
-                        * FarmView.TILE_SIZE;
+        double baseWidth =
+                type.getWidth() * FarmView.TILE_SIZE;
 
-        double y =
-                decoration.getRow()
-                        * FarmView.TILE_SIZE;
+        double baseHeight =
+                type.getHeight() * FarmView.TILE_SIZE;
+
+        double scale = 1.08;
 
         double width =
-                type.getWidth()
-                        * FarmView.TILE_SIZE;
+                baseWidth * scale;
 
         double height =
-                type.getHeight()
-                        * FarmView.TILE_SIZE;
+                baseHeight * scale;
+
+        double x =
+                decoration.getColumn() * FarmView.TILE_SIZE
+                        - (width - baseWidth) / 2.0;
+
+        double y =
+                decoration.getRow() * FarmView.TILE_SIZE
+                        - (height - baseHeight) / 2.0;
 
         String path =
                 "/assets/decoration/"

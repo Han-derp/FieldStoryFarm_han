@@ -111,9 +111,9 @@ public final class BusinessToolbarView extends HBox {
         Button button =
                 new Button();
 
-        button.setPrefSize(40, 40);
-        button.setMinSize(40, 40);
-        button.setMaxSize(40, 40);
+        button.setPrefSize(44, 44);
+        button.setMinSize(44, 44);
+        button.setMaxSize(44, 44);
 
         button.setAccessibleText(
                 fallbackText
@@ -134,8 +134,8 @@ public final class BusinessToolbarView extends HBox {
         ImageView icon =
                 BImageAssets.view(
                         path,
-                        26,
-                        26
+                        30,
+                        30
                 );
 
         if (icon != null) {
