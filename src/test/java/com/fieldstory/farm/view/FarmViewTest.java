@@ -121,7 +121,7 @@ class FarmViewTest {
 
     @Test
     void tooltipTextForDecorationArea() {
-        assertEquals("装饰区（P0 占位）", FarmView.tooltipTextFor(null, 0L));
+        assertEquals("装饰区，可放置装饰", FarmView.tooltipTextFor(null, 0L));
     }
 
     @Test
