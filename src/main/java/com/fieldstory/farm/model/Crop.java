@@ -67,4 +67,9 @@ public interface Crop {
     int getDroughtStreak();
 
     void setDroughtStreak(int droughtStreak);
+
+    /** 累计事件影响日数（D 模块 P2 文档 §二：事件影响记录属 A 模块 Crop，D 不持有；验收规范 §五十） */
+    int getEventCount();
+
+    void setEventCount(int eventCount);
 }

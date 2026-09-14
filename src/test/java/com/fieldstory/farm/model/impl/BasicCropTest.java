@@ -31,6 +31,7 @@ class BasicCropTest {
         assertEquals(0, crop.getGreenRainCount());
         assertEquals(-1L, crop.getLastHydratedWorldTime(), "新作物默认无补水记录（哨兵 -1，D16）");
         assertEquals(0, crop.getDroughtStreak());
+        assertEquals(0, crop.getEventCount(), "新作物默认无事件影响（哨兵 0，D 模块 P2 文档 §二）");
     }
 
     @Test
@@ -41,6 +42,7 @@ class BasicCropTest {
         assertEquals(0, crop.getGreenRainCount());
         assertEquals(-1L, crop.getLastHydratedWorldTime(), "工厂创建默认无补水记录（哨兵 -1，D16）");
         assertEquals(0, crop.getDroughtStreak());
+        assertEquals(0, crop.getEventCount(), "工厂创建默认无事件影响（哨兵 0，D 模块 P2 文档 §二）");
     }
 
     @Test
@@ -60,6 +62,7 @@ class BasicCropTest {
         crop.setGreenRainCount(1);
         crop.setLastHydratedWorldTime(120L);
         crop.setDroughtStreak(3);
+        crop.setEventCount(2);
 
         assertEquals(uuid, crop.getCropUuid());
         assertEquals(CropType.WHEAT, crop.getCropType());
@@ -73,5 +76,6 @@ class BasicCropTest {
         assertEquals(1, crop.getGreenRainCount());
         assertEquals(120L, crop.getLastHydratedWorldTime());
         assertEquals(3, crop.getDroughtStreak());
+        assertEquals(2, crop.getEventCount());
     }
 }

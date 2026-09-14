@@ -48,6 +48,9 @@ public class BasicCrop implements Crop {
     /** 连续干旱计数（规则文档 §二十九；验收规范 §五十） */
     private int droughtStreak;
 
+    /** 累计事件影响日数（D 模块 P2 文档 §二；哨兵 0，工厂显式设置） */
+    private int eventCount;
+
     @Override
     public UUID getCropUuid() {
         return cropUuid;
@@ -166,5 +169,15 @@ public class BasicCrop implements Crop {
     @Override
     public void setDroughtStreak(int droughtStreak) {
         this.droughtStreak = droughtStreak;
+    }
+
+    @Override
+    public int getEventCount() {
+        return eventCount;
+    }
+
+    @Override
+    public void setEventCount(int eventCount) {
+        this.eventCount = eventCount;
     }
 }
