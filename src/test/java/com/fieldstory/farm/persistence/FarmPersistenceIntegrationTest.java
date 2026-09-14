@@ -173,14 +173,14 @@ class FarmPersistenceIntegrationTest {
         manager.setBeforeSaveHook(() -> {
             state.setGameDay(model.getGameClock().getGameDay());
             WeatherType type = model.getWeatherState().getWeatherType();
-            state.setCurrentWeather(type == null ? null : type.name());
+            state.setCurrentWeather(type);
         });
         manager.saveAndExit();
 
         // ---------- 重启 ----------
         GameManager restarted = managerOn("weather.db");
         GameState loaded = restarted.start();
-        assertEquals("GREEN_RAIN", loaded.getCurrentWeather(),
+        assertEquals(WeatherType.GREEN_RAIN, loaded.getCurrentWeather(),
                 "current_weather 应随存档恢复（验收 §七十三）");
 
         // 装配层读档还原：把存档天气还原到新模型（天气日索引与游戏天数同源）

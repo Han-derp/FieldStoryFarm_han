@@ -5,18 +5,20 @@ import com.fieldstory.farm.model.OfflineSimulationResult;
 /**
  * B 模块 P2 离线模拟正式入口。
  *
- * <p>本 Service 的职责是离线时间窗口编排：应用离线上限，并将有效游戏时间窗口
- * 委托给 A 模块统一 WorldSimulationService。
+ * <p>B 负责离线时间窗口编排：复用 {@link WorldTimeService} 执行 72 分钟封顶与
+ * 日界/事件结束/作物成熟三类切点计算，并驱动循环调用 A 模块
+ * {@link WorldSimulationService}。
  *
- * <p>它不得拥有独立的成长、天气、枯萎、事件或生命记忆算法。
- *
- * <p>当前 B-P2-1A 先冻结此 B 侧接口。默认实现 BasicOfflineSimulationService
- * 必须在 A 模块 WorldSimulationService 的正式 Java 签名冻结后接入，避免 B 私自定义 A 模块接口。
+ * <p>职责红线：本 Service 不拥有独立的成长、天气、枯萎或事件算法；不执行主动浇水、
+ * 主动施肥、购买、移动装饰、主动收获或自动出售；不访问数据库。
  */
 public interface OfflineSimulationService {
 
     /**
      * 执行一次离线模拟。
+     *
+     * <p>1 现实分钟 = 1 游戏小时；有效时长由 {@link WorldTimeService} 封顶为
+     * 72 现实分钟（最多 72 游戏小时 / 3 游戏日）。
      *
      * @param rawOfflineMinutes 实际离线现实分钟数
      * @return 本次离线模拟的结构化结果

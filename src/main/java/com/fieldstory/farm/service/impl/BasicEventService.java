@@ -28,9 +28,11 @@ import static com.fieldstory.farm.util.GameConstants.EVENT_PROB_RAINBOW_DAY;
  * （合计 100）。一次随机抽取决定结果，禁止四个事件分别独立判断（验收规范 §九十）。
  * 随机必须经 {@code RandomProvider}，禁止 {@code new Random()}（规则文档 §九十）。
  *
- * <p><b>世界时间口径（决策 D14）：</b>世界时间 = {@code getGameDay() * 24 + getGameHour()}
- * （游戏小时），与 A 模块 {@code plantWorldTime} 同一适配口径。D 侧不新增第二时钟、
- * 不新增 {@code getWorldTime()}。
+ * <p><b>世界时间口径（决策 D14 + P2 离线 Event 方案 A）：</b>事件抽取由
+ * {@link #rollDailyEvent(int)} 的 {@code dayIndex} 明确决定新事件起点：
+ * {@code startWorldTime = dayIndex * 24}。因此离线日结不依赖尚未推进的 GameClock；
+ * B 可在完整离线循环结束后一次性推进时钟。构造器中的 GameClock 继续保留以兼容既有装配，
+ * 但不再作为事件 start/end 的时间事实源。
  *
  * <p><b>阶段边界：</b>本实现只提供事件规则与状态，<b>不执行</b>离线模拟
  * （离线模拟由 B 模块复用本服务规则执行，验收规范 §八十九）。
@@ -40,7 +42,7 @@ public class BasicEventService implements EventService {
     /** 事件状态（持有，1 对 1）。 */
     private final EventState eventState;
 
-    /** 游戏时钟（读取世界时间，规则文档 §八）。 */
+    /** 游戏时钟：保留既有构造器/装配兼容；事件起止时间不再从它读取。 */
     private final GameClock gameClock;
 
     /**
@@ -72,7 +74,9 @@ public class BasicEventService implements EventService {
             type = EventType.RAINBOW_DAY;
         }
 
-        long now = currentWorldTime();
+        // P2 离线 Event 方案 A：新事件从 dayIndex 对应游戏日 00:00 开始。
+        // 不读取 GameClock，避免离线循环结束前时钟尚未推进导致 start/end 使用旧时间。
+        long now = (long) dayIndex * 24L;
         eventState.setEventType(type);
         eventState.setTargetCropType(null);
         eventState.setPayload(null);
@@ -174,12 +178,4 @@ public class BasicEventService implements EventService {
         return candidates[RandomProvider.nextInt(candidates.length)];
     }
 
-    /**
-     * 当前世界时间（游戏小时，决策 D14 适配口径）。
-     *
-     * @return 世界时间（游戏小时）
-     */
-    private long currentWorldTime() {
-        return (long) gameClock.getGameDay() * 24 + gameClock.getGameHour();
-    }
 }

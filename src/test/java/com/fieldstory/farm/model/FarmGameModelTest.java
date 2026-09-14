@@ -105,7 +105,7 @@ class FarmGameModelTest {
     @Test
     void restoreWeatherWithNullKeepsDefaultSunny() {
         FarmGameModel model = new FarmGameModel();
-        model.restoreWeather(null, 3);
+        model.restoreWeather((String) null, 3);
         assertEquals(WeatherType.SUNNY, model.getWeatherState().getWeatherType(),
                 "无天气记录时应保持默认晴天（D 模块 P1 文档 §4.1）");
         assertEquals(3, model.getWeatherState().getDayIndex());

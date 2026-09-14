@@ -256,6 +256,24 @@ class BasicWorldSimulationServiceTest {
     }
 
     /**
+     * A/B P2：四参 growSegment 必须按地块逐 Crop 解析 DecorationRate，
+     * 不能把 B 的位置/作物专属 Buff 压成一个全局值。
+     */
+    @Test
+    void growSegmentSupportsPerCropDecorationRateResolver() {
+        Farm farm = new BasicFarm();
+        Crop normal = plantOn(farm, 2, 2, GrowthStage.SEED, 0.0);
+        Crop boosted = plantOn(farm, 2, 3, GrowthStage.SEED, 0.0);
+
+        simulation.growSegment(farm, 24.0, GrowthRates.P0,
+                (row, column, cropType) -> row == 2 && column == 3 ? 1.5 : 1.0);
+
+        assertEquals(100.0 / 3.0, normal.getGrowthProgress(), 1e-6);
+        assertEquals(50.0, boosted.getGrowthProgress(), 1e-6,
+                "逐 Crop resolver 应覆盖 GrowthRates 中的单一 decorationRate");
+    }
+
+    /**
      * WITHERED 跳过不成长（A P1 设计 §6.3）：进度与阶段均不变。
      */
     @Test

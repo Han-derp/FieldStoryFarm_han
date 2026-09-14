@@ -89,6 +89,28 @@ class EventServiceTest {
     }
 
     @Test
+    void rollDailyEventUsesDayIndexAsWorldTimeStart() {
+        BasicEventState state = new BasicEventState();
+        // BasicGameClock 默认仍是第 1 天 06:00；方案 A 要求它不能影响 day 4 事件起点。
+        BasicEventService service = new BasicEventService(state, new BasicGameClock());
+
+        EventType rolled = EventType.NONE;
+        for (long seed = 0L; seed < 10_000L && rolled == EventType.NONE; seed++) {
+            RandomProvider.setSeed(seed);
+            rolled = service.rollDailyEvent(4);
+        }
+
+        assertTrue(rolled != EventType.NONE, "测试应找到一个非 NONE 事件");
+        assertEquals(96L, state.getStartWorldTime(),
+                "D 方案 A：day 4 新事件从 4*24=96 开始，不读取旧 GameClock");
+        if (rolled.isInstant()) {
+            assertEquals(96L, state.getEndWorldTime());
+        } else {
+            assertEquals(96L + rolled.getDurationHours(), state.getEndWorldTime());
+        }
+    }
+
+    @Test
     void meteorShowerLasts24Hours() {
         BasicEventState state = new BasicEventState();
         BasicEventService service = new BasicEventService(state, new BasicGameClock());

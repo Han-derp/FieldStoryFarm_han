@@ -7,6 +7,7 @@ import com.fieldstory.farm.model.Soil;
 import com.fieldstory.farm.model.SoilState;
 import com.fieldstory.farm.model.WeatherType;
 import com.fieldstory.farm.service.DailySimulationResult;
+import com.fieldstory.farm.service.DecorationRateResolver;
 import com.fieldstory.farm.service.DaySettlementInput;
 import com.fieldstory.farm.service.EventService;
 import com.fieldstory.farm.service.GrowthRates;
@@ -71,23 +72,46 @@ public class BasicWorldSimulationService implements WorldSimulationService {
 
     @Override
     public List<Crop> growSegment(Farm farm, double gameHours, GrowthRates rates) {
-        // 验收 §八十八：离线时间必须按游戏日边界/事件结束时间/作物成熟时间切段，
-        // 本方法只处理当前时间段的成长，不判枯萎、不换天气
+        return growSegment(farm, gameHours, rates, null);
+    }
+
+    @Override
+    public List<Crop> growSegment(Farm farm, double gameHours, GrowthRates rates,
+                                  DecorationRateResolver decorationResolver) {
+        // 验收 §八十八：本方法只处理当前时间段成长，不判枯萎、不换天气。
         if (gameHours <= 0) {
             return List.of();
         }
-        // 坏数据兜底：rates 为 null 时降级 P0 单位倍率（GrowthRates 已内建非法值钳制）
+
         GrowthRates effectiveRates = rates == null ? GrowthRates.P0 : rates;
-        double elapsedGameDays = gameHours / 24.0;   // 验收 §二十五：支持非整日成长
+        double elapsedGameDays = gameHours / 24.0;
         List<Crop> newlyMatured = new ArrayList<>();
-        for (Crop crop : plantedCrops(farm)) {
-            // WITHERED 跳过不成长（A P1 设计 §6.3；GrowthService 已内建守卫，此处显式跳过）
+
+        // A/B P2 决议：DecorationRate 天然逐 Crop。
+        // A 不实现装饰规则，只逐格调用 B 提供的 resolver；三参调用 resolver=null，
+        // 完全回退既有单一 rates.decorationRate() 行为。
+        for (Soil soil : farm.getSoils()) {
+            if (soil.getState() != SoilState.PLANTED || soil.getCrop() == null) {
+                continue;
+            }
+
+            Crop crop = soil.getCrop();
             if (crop.getGrowthStage() == GrowthStage.WITHERED) {
                 continue;
             }
+
+            double decorationRate = decorationResolver == null
+                    ? effectiveRates.decorationRate()
+                    : decorationResolver.decorationRate(
+                            soil.getRow(), soil.getColumn(), crop.getCropType());
+
+            GrowthRates perCropRates = new GrowthRates(
+                    effectiveRates.weatherRate(),
+                    decorationRate,
+                    effectiveRates.eventRate());
+
             boolean wasMature = crop.getGrowthProgress() >= 100.0;
-            growthService.applyGrowth(crop, elapsedGameDays, effectiveRates);
-            // 收集本段新成熟（进度跨过 100）的作物；段前已成熟的不在本段重复上报
+            growthService.applyGrowth(crop, elapsedGameDays, perCropRates);
             if (!wasMature && crop.getGrowthProgress() >= 100.0) {
                 newlyMatured.add(crop);
             }

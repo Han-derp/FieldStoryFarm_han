@@ -35,6 +35,25 @@ public interface WorldSimulationService {
     List<Crop> growSegment(Farm farm, double gameHours, GrowthRates rates);
 
     /**
+     * 分段成长的逐 Crop 装饰倍率扩展入口。
+     *
+     * <p>两个既有冻结签名保持不变；本重载为 A/B P2 加法式扩展。
+     * {@code weatherRate}/{@code eventRate} 继续从 {@code rates} 读取，
+     * {@code decorationRate} 由 resolver 按 row/column/CropType 逐株覆盖。
+     * resolver 为 null 时回退到三参接口既有行为。
+     *
+     * @param farm               农场
+     * @param gameHours          本段经过的游戏小时
+     * @param rates              段级成长倍率
+     * @param decorationResolver B 模块提供的逐 Crop 装饰倍率解析器；可为 null
+     * @return 本段新成熟作物列表
+     */
+    default List<Crop> growSegment(Farm farm, double gameHours, GrowthRates rates,
+                                   DecorationRateResolver decorationResolver) {
+        return growSegment(farm, gameHours, rates);
+    }
+
+    /**
      * 每日结算（验收 §八十九 14 步，规则 §八十一）。
      *
      * <p>严格按 §八十九 顺序执行：① 成长汇总 ② 更新阶段 ③ 标记成熟 ④ 日结边界
