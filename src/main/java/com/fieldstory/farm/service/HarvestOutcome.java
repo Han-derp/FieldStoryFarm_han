@@ -9,8 +9,8 @@ import java.util.Objects;
  * 收获事务结果（C 模块 品质与传说域，P2；验收规范 §一百零三）。
  *
  * <p>比 P0 的 {@link HarvestResult} 多携带事务产物：品质、评分、售价、
- * 肥料奖励、传说标志、生命故事与记忆档案。失败时仅结果码有效，
- * 其余字段为默认值。
+ * 肥料奖励、首次传说奖励、传说标志、生命故事与记忆档案。失败时仅结果码
+ * 有效，其余字段为默认值。
  *
  * <p>纯值对象：只保存结论，不含判定逻辑。
  */
@@ -31,6 +31,9 @@ public class HarvestOutcome {
     /** 肥料奖励数量（规则文档 §六十六；成功时有效） */
     private final int fertilizerReward;
 
+    /** 首次传说奖励金币（规则文档 §六十七；非首次或未装配奖励服务时为 0） */
+    private final int firstRewardGold;
+
     /** 是否传说突破成功 */
     private final boolean legendary;
 
@@ -42,7 +45,7 @@ public class HarvestOutcome {
 
     private HarvestOutcome(HarvestResult result, Quality quality, int qualityScore,
                            int sellPrice, int fertilizerReward, boolean legendary,
-                           String finalStory, CropMemory memory) {
+                           String finalStory, CropMemory memory, int firstRewardGold) {
         this.result = Objects.requireNonNull(result, "结果码不能为空");
         this.quality = quality;
         this.qualityScore = qualityScore;
@@ -51,14 +54,29 @@ public class HarvestOutcome {
         this.legendary = legendary;
         this.finalStory = finalStory;
         this.memory = memory;
+        this.firstRewardGold = firstRewardGold;
     }
 
-    /** 成功结果工厂。 */
+    /** 成功结果工厂（无首次传说奖励，向后兼容旧调用方）。 */
     public static HarvestOutcome success(Quality quality, int qualityScore, int sellPrice,
                                          int fertilizerReward, boolean legendary,
                                          String finalStory, CropMemory memory) {
+        return success(quality, qualityScore, sellPrice, fertilizerReward, legendary,
+                finalStory, memory, 0);
+    }
+
+    /**
+     * 成功结果工厂（带首次传说奖励，规则文档 §六十七）。
+     *
+     * @param firstRewardGold 首次获得该传说作物发放的金币（非首次为 0）
+     */
+    public static HarvestOutcome success(Quality quality, int qualityScore, int sellPrice,
+                                         int fertilizerReward, boolean legendary,
+                                         String finalStory, CropMemory memory,
+                                         int firstRewardGold) {
         return new HarvestOutcome(HarvestResult.SUCCESS, quality, qualityScore,
-                sellPrice, fertilizerReward, legendary, finalStory, memory);
+                sellPrice, fertilizerReward, legendary, finalStory, memory,
+                firstRewardGold);
     }
 
     /** 失败结果工厂（未成熟/未种植/无作物）。 */
@@ -66,7 +84,7 @@ public class HarvestOutcome {
         if (result == HarvestResult.SUCCESS) {
             throw new IllegalArgumentException("成功结果请使用 success 工厂");
         }
-        return new HarvestOutcome(result, null, 0, 0, 0, false, null, null);
+        return new HarvestOutcome(result, null, 0, 0, 0, false, null, null, 0);
     }
 
     /** 是否收获成功。 */
@@ -93,6 +111,11 @@ public class HarvestOutcome {
 
     public int getFertilizerReward() {
         return fertilizerReward;
+    }
+
+    /** 首次传说奖励金币；非首次或无奖励服务时为 0（规则文档 §六十七）。 */
+    public int getFirstRewardGold() {
+        return firstRewardGold;
     }
 
     public boolean isLegendary() {

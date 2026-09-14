@@ -36,6 +36,21 @@ public interface QualityService {
     int calculateScore(QualityScoreInput input);
 
     /**
+     * 解释品质评分的分项明细（验收规范 §七十七 品质解释 UI 数据源）。
+     *
+     * <p>返回确定性分项（基础/雨/旱/绿雨/浇水/施肥/装饰/事件）与
+     * 确定性总分，<b>不包含随机分</b>（规则文档 §三十九：随机 0~9 在
+     * 收获时才算，验收规范 §七十七：收获前不显示随机分）。
+     *
+     * <p>不消耗随机源：查看作物时反复调用本方法不会改变之后
+     * {@link #calculateScore} 的随机结果。
+     *
+     * @param input 评分输入（作物类型 + 经历计数 + 装饰/事件分）
+     * @return 分项明细（确定性分项，不含随机分）
+     */
+    QualityBreakdown explainScore(QualityScoreInput input);
+
+    /**
      * 普通四档品质判定（规则文档 §四十）。
      *
      * <p>档位：Score &lt; 60 → COMMON；60 ≤ Score &lt; 80 → EXCELLENT；
