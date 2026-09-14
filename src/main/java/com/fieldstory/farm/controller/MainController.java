@@ -274,7 +274,7 @@ public class MainController {
 
         // A 的 FarmView 不改；B 装饰通过透明覆盖层扩展 CENTER。
         FarmViewController farmViewController = new FarmViewController(
-                farm, land, planting, watering, harvest, model.getGameClock());
+                farm, land, planting, watering, harvest, model.getGameClock(), economy);
         FarmView farmView = farmViewController.getView();
 
         // B P1：装饰状态直接绑定当前 GameState；E 的 SqliteSaveService 负责最终落盘。
