@@ -58,6 +58,10 @@ public class CropMemory {
      *  用于判断"干旱当天主动浇水救援"，金色麦穗条件 2，规则文档 §四十二） */
     private long lastDroughtGameDay = -1;
 
+    /** 最近一次施肥发生的游戏日；-1 哨兵 = 从未施肥（验收规范 §六十四
+     *  Crop 新增字段的对应记忆字段；D14 口径 long 游戏日，每日最多施 1 次） */
+    private long lastFertilizeGameDay = -1;
+
     /** 是否发生过"干旱当天玩家主动浇水救援"（金色麦穗条件 2，规则文档 §四十二） */
     private boolean waterRescueOnDroughtDay;
 
@@ -185,6 +189,15 @@ public class CropMemory {
 
     public void setLastDroughtGameDay(long lastDroughtGameDay) {
         this.lastDroughtGameDay = lastDroughtGameDay;
+    }
+
+    /** 最近一次施肥游戏日；-1 哨兵 = 从未施肥（验收规范 §六十四）。 */
+    public long getLastFertilizeGameDay() {
+        return lastFertilizeGameDay;
+    }
+
+    public void setLastFertilizeGameDay(long lastFertilizeGameDay) {
+        this.lastFertilizeGameDay = lastFertilizeGameDay;
     }
 
     public boolean isWaterRescueOnDroughtDay() {

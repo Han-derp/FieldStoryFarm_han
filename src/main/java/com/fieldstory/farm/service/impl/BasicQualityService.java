@@ -1,6 +1,7 @@
 package com.fieldstory.farm.service.impl;
 
 import com.fieldstory.farm.model.Quality;
+import com.fieldstory.farm.service.QualityBreakdown;
 import com.fieldstory.farm.service.QualityScoreInput;
 import com.fieldstory.farm.service.QualityService;
 import com.fieldstory.farm.util.RandomProvider;
@@ -70,22 +71,25 @@ public class BasicQualityService implements QualityService {
 
     @Override
     public int calculateScore(QualityScoreInput input) {
+        // 确定性分项 + 收获时随机 0~9（规则文档 §三十九）；
+        // 分项明细复用 explainScore，保证解释 UI 与最终评分同源
+        QualityBreakdown breakdown = explainScore(input);
+        return breakdown.deterministicTotal() + RandomProvider.nextInt(RANDOM_SCORE_BOUND);
+    }
+
+    @Override
+    public QualityBreakdown explainScore(QualityScoreInput input) {
         Objects.requireNonNull(input, "评分输入不能为空");
 
         int baseScore = input.getCropType().getBaseScore();
-        int weatherScore = rainScore(input.getRainCount())
-                + droughtScore(input.getDroughtCount())
-                + greenRainScore(input.getGreenRainCount());
-        int operationScore = waterScore(input.getManualWaterCount())
-                + fertilizerScore(input.getFertilizerCount());
-        int randomScore = RandomProvider.nextInt(RANDOM_SCORE_BOUND);
-
-        return baseScore
-                + weatherScore
-                + operationScore
-                + input.getDecorationScore()
-                + input.getEventScore()
-                + randomScore;
+        int rain = rainScore(input.getRainCount());
+        int drought = droughtScore(input.getDroughtCount());
+        int greenRain = greenRainScore(input.getGreenRainCount());
+        int water = waterScore(input.getManualWaterCount());
+        int fertilizer = fertilizerScore(input.getFertilizerCount());
+        // 随机分不在此计算（验收规范 §七十七：收获前不显示随机分）
+        return new QualityBreakdown(baseScore, rain, drought, greenRain,
+                water, fertilizer, input.getDecorationScore(), input.getEventScore());
     }
 
     @Override
