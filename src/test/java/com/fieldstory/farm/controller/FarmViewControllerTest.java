@@ -113,6 +113,31 @@ class FarmViewControllerTest {
         assertEquals(List.of(), FarmViewController.actionsFor(null));
     }
 
+
+    // ==================== P2 播种库存按钮文案 ====================
+
+    @Test
+    void seedButtonLabelUsesEconomyServiceInventory() {
+        TestEconomyService economy = new TestEconomyService();
+        economy.setSeedCount(CropType.WHEAT, 3);
+
+        assertEquals("小麦 ×3",
+                FarmViewController.seedButtonLabel(CropType.WHEAT, economy));
+
+        // 再次读取必须反映当前库存，不缓存第一次读取结果。
+        economy.setSeedCount(CropType.WHEAT, 2);
+        assertEquals("小麦 ×2",
+                FarmViewController.seedButtonLabel(CropType.WHEAT, economy));
+    }
+
+    @Test
+    void seedButtonLabelShowsZeroInventory() {
+        TestEconomyService economy = new TestEconomyService();
+
+        assertEquals("玉米 ×0",
+                FarmViewController.seedButtonLabel(CropType.CORN, economy));
+    }
+
     // ==================== actionMessageFor：各结果枚举映射（设计文档 D13） ====================
 
     @Test
@@ -204,7 +229,8 @@ class FarmViewControllerTest {
                     new BasicPlantingService(economy, clock),
                     new BasicWateringService(),
                     new BasicHarvestService(economy, landService),
-                    clock);
+                    clock,
+                    economy);
             FarmView view = controller.getView();
 
             // 点击 (2,2) 格 → 选中并弹出操作菜单

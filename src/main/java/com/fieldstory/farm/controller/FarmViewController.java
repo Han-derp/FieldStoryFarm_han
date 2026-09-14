@@ -15,6 +15,7 @@ import com.fieldstory.farm.service.PlantingService;
 import com.fieldstory.farm.service.ReclaimResult;
 import com.fieldstory.farm.service.WateringResult;
 import com.fieldstory.farm.service.WateringService;
+import com.fieldstory.farm.service.economy.EconomyService;
 import com.fieldstory.farm.view.FarmView;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
@@ -28,8 +29,12 @@ import java.util.List;
  *
  * <p>点击 FARM_PLOT 格 → 选中并弹出操作菜单（UI规范 §11、§12），
  * 按土壤状态决定按钮：EMPTY→开垦、TILLED→播种、PLANTED→浇水、MATURE→收获、
- * WITHERED→铲除（P1，{@link #actionsFor}）。业务一律走 A 的 Service：
+ * WITHERED→铲除（P1，{@link #actionsFor}）。土地/作物状态变化继续统一走正式业务 Service：
  * 开垦→LandService.reclaim、播种→PlantingService.plant、浇水→WateringService.water。
+ *
+ * <p>P2 启动基线新增一项只读跨模块查询：播种种子选择菜单通过 B 的
+ * {@link EconomyService#getSeedCount(CropType)} 显示实时种子库存。控制器不直接访问
+ * Player.seedInventory，也不直接修改种子数量。
  *
  * <p>收获：C 模块 BasicHarvestService 已交付，本控制器只做接线——
  * 调用注入的 {@link HarvestService#harvest(Soil)} 并按结果码刷新界面；
@@ -40,8 +45,8 @@ import java.util.List;
  * GameClock.getGameDay()，浇水时传入 WateringService，
  * 刷新视图前同步给 FarmView（{@link FarmView#setCurrentGameDay}）。
  *
- * <p>纯静态函数 {@link #actionsFor} / {@link #actionMessageFor} 只返回
- * 枚举/字符串，不依赖 JavaFX 线程，可在无 GUI 线程下单测。
+ * <p>纯静态函数 {@link #actionsFor} / {@link #actionMessageFor} /
+ * {@link #seedButtonLabel} 只返回枚举/字符串，不依赖 JavaFX 线程，可在无 GUI 线程下单测。
  */
 public class FarmViewController {
 
@@ -64,11 +69,17 @@ public class FarmViewController {
     /** 游戏时钟（D：当前游戏日，浇水/播种视图刷新基准） */
     private final GameClock gameClock;
 
+    /**
+     * B 经济服务：仅用于播种菜单读取实时种子库存。
+     * 真正的种子消耗仍由 PlantingService 负责。
+     */
+    private final EconomyService economyService;
+
     /** 农场画布视图 */
     private final FarmView farmView;
 
     /**
-     * 装配视图、四个 Service（三个 A + 一个 C 收获）与 D 的时钟。
+     * 装配视图、四个业务 Service（三个 A + 一个 C 收获）、D 的时钟与 B 的只读经济查询入口。
      *
      * @param farm            农场模型
      * @param landService     开垦服务
@@ -76,6 +87,7 @@ public class FarmViewController {
      * @param wateringService 浇水服务
      * @param harvestService  收获服务
      * @param gameClock       游戏时钟
+     * @param economyService  B 经济服务；播种菜单只读取实时种子库存
      */
     public FarmViewController(
             Farm farm,
@@ -83,13 +95,15 @@ public class FarmViewController {
             PlantingService plantingService,
             WateringService wateringService,
             HarvestService harvestService,
-            GameClock gameClock) {
+            GameClock gameClock,
+            EconomyService economyService) {
         this.farm = farm;
         this.landService = landService;
         this.plantingService = plantingService;
         this.wateringService = wateringService;
         this.harvestService = harvestService;
         this.gameClock = gameClock;
+        this.economyService = economyService;
         this.farmView = new FarmView(farm);
         this.farmView.setOnTileSelected(this::onTileSelected);
     }
@@ -217,6 +231,21 @@ public class FarmViewController {
         }
     }
 
+
+    /**
+     * 纯函数：生成播种种子按钮文案。
+     *
+     * <p>P2 启动基线格式固定为“种子类型 ×剩余数量”，库存只通过
+     * {@link EconomyService#getSeedCount(CropType)} 读取，不直接访问 Player Map。
+     *
+     * @param type           种子对应作物类型
+     * @param economyService B 经济服务
+     * @return 例如“小麦 ×3”
+     */
+    static String seedButtonLabel(CropType type, EconomyService economyService) {
+        return type.getDisplayName() + " ×" + economyService.getSeedCount(type);
+    }
+
     // ==================== 交互（UI规范 §11、§12） ====================
 
     /** 点击格回调：选中 + 按状态弹菜单；装饰区点击收起菜单。 */
@@ -302,14 +331,16 @@ public class FarmViewController {
     }
 
     /**
-     * 播种入口：弹出种子选择按钮（小麦10金/玉米15金/胡萝卜20金，
-     * 种子价取自 CropType.getSeedPrice，单一数据源 D12，不硬编码）。
+     * 播种入口：弹出种子选择按钮。
+     *
+     * <p>P2 启动基线显示“种子类型 ×剩余数量”。每次打开菜单都通过
+     * EconomyService.getSeedCount() 实时读取库存，不缓存、不直接访问 Player Map。
+     * 真正的种子消耗仍由 PlantingService.plant() 负责。
      */
     private void showSeedButtons(Soil soil) {
         List<Node> buttons = new ArrayList<>();
         for (CropType type : CropType.values()) {
-            Button button = farmView.createMenuButton(
-                    type.getDisplayName() + " " + type.getSeedPrice() + "金");
+            Button button = farmView.createMenuButton(seedButtonLabel(type, economyService));
             button.setOnAction(event -> plant(soil, type));
             buttons.add(button);
         }
