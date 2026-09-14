@@ -43,6 +43,14 @@ import java.util.List;
  * 两张日志表为<b>追加式</b>记录，不属于全量覆盖的会话状态，故不经
  * {@code SqliteSaveService} 的清表—重写流程。
  *
+ * <p><b>P3 v4 增量（验收规范 §一百一十~§一百二十九）：</b>
+ * <ul>
+ *   <li>{@code crop_collection} / {@code decoration_collection} / {@code legendary_collection}：
+ *       收集图鉴（作物 15 / 装饰 14 / 传说 3），永久保存；</li>
+ *   <li>{@code set_collection}：套装 setCollected / setActive 两个独立状态；</li>
+ *   <li>{@code graduation}：毕业状态单行表（FarmScore == 147 时写入）。</li>
+ * </ul>
+ *
  * <p><b>条件加列语法：</b>迁移语句以 {@value #ADD_COLUMN_PREFIX} 开头时表示"若该列不存在才加"，
  * 形如 {@code ADD COLUMN world_state.world_total_minutes INTEGER NOT NULL DEFAULT -1}。
  * SQLite 的 {@code ADD COLUMN} 在列已存在时会直接报错，而这个语法让迁移对
@@ -51,14 +59,14 @@ import java.util.List;
 public final class SchemaMigrator {
 
     /** 程序当前支持的数据库结构版本。新增表/字段时必须 +1 并追加迁移步骤。 */
-    public static final int SCHEMA_VERSION = 3;
+    public static final int SCHEMA_VERSION = 4;
 
     /** 「条件加列」语句前缀：列已存在时跳过，保证迁移幂等。 */
     static final String ADD_COLUMN_PREFIX = "ADD COLUMN ";
 
     /** 全部迁移步骤，按版本升序。 */
     private static final List<MigrationStep> STEPS =
-            List.of(stepToV1(), stepToV2(), stepToV3());
+            List.of(stepToV1(), stepToV2(), stepToV3(), stepToV4());
 
     private SchemaMigrator() {
         // 工具类，禁止实例化
@@ -265,6 +273,41 @@ public final class SchemaMigrator {
                         + " id INTEGER PRIMARY KEY AUTOINCREMENT,"
                         + " day_index INTEGER NOT NULL,"
                         + " summary TEXT NOT NULL)"));
+    }
+
+    /**
+     * v3 → v4：P3 收集与毕业增量（验收规范 §一百一十~§一百二十九；DAO 归属 §一百五十一条）。
+     *
+     * <p>只加表，不动任何既有列，旧档原地升级不丢数据：
+     * <ul>
+     *   <li>{@code crop_collection}：作物图鉴（作物 × 品质联合主键，三态状态），15 项目标；</li>
+     *   <li>{@code decoration_collection}：装饰图鉴（类型 id 主键，存在即已收集），14 项目标；</li>
+     *   <li>{@code legendary_collection}：传说图鉴（作物类型主键，存在即已获得），3 种目标；</li>
+     *   <li>{@code set_collection}：套装收集状态（collected 永久 / active 当前，两者独立）；</li>
+     *   <li>{@code graduation}：毕业单行表（首次达到 147 写入，只记一次）。</li>
+     * </ul>
+     * 这五张表都是<b>全量覆盖</b>的会话状态，经 {@code SqliteSaveService} 清表—重写。
+     */
+    private static MigrationStep stepToV4() {
+        return new MigrationStep(4, List.of(
+                "CREATE TABLE IF NOT EXISTS crop_collection ("
+                        + " crop_type TEXT NOT NULL,"
+                        + " quality TEXT NOT NULL,"
+                        + " status TEXT NOT NULL,"
+                        + " PRIMARY KEY (crop_type, quality))",
+                "CREATE TABLE IF NOT EXISTS decoration_collection ("
+                        + " decoration_type TEXT PRIMARY KEY)",
+                "CREATE TABLE IF NOT EXISTS legendary_collection ("
+                        + " crop_type TEXT PRIMARY KEY)",
+                "CREATE TABLE IF NOT EXISTS set_collection ("
+                        + " set_id TEXT PRIMARY KEY,"
+                        + " collected INTEGER NOT NULL DEFAULT 0,"
+                        + " active INTEGER NOT NULL DEFAULT 0)",
+                "CREATE TABLE IF NOT EXISTS graduation ("
+                        + " id INTEGER PRIMARY KEY CHECK (id = 1),"
+                        + " graduated INTEGER NOT NULL DEFAULT 0,"
+                        + " graduation_world_time INTEGER NOT NULL DEFAULT -1,"
+                        + " graduation_game_day INTEGER NOT NULL DEFAULT -1)"));
     }
 
     /** 单个迁移步骤：执行完 {@code version} 所列 DDL 后，库结构版本应等于 {@code version}。 */

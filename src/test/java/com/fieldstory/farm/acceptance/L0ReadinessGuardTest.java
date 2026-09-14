@@ -167,8 +167,8 @@ class L0ReadinessGuardTest {
     void activeEventTableHasExactlyFiveSpecifiedColumns() throws Exception {
         DatabaseService db = new DatabaseService(tempDir.resolve("l0-schema.db"));
         try (Connection connection = db.openConnection()) {
-            assertEquals(3, SchemaMigrator.SCHEMA_VERSION,
-                    "P2 结构版本应为 3（P2 日志表）");
+            assertEquals(4, SchemaMigrator.SCHEMA_VERSION,
+                    "结构版本应为 4（P2 日志表 + P3 收集/套装/毕业表）");
             assertTrue(columnExists(connection, "active_event", "event_type"));
             assertTrue(columnExists(connection, "active_event", "start_world_time"));
             assertTrue(columnExists(connection, "active_event", "end_world_time"));

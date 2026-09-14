@@ -4,6 +4,8 @@ import com.fieldstory.farm.manager.GameManager;
 import com.fieldstory.farm.manager.SceneManager;
 import com.fieldstory.farm.model.Crop;
 import com.fieldstory.farm.model.CropMemory;
+import com.fieldstory.farm.model.CropType;
+import com.fieldstory.farm.model.Decoration;
 import com.fieldstory.farm.model.EventState;
 import com.fieldstory.farm.model.Farm;
 import com.fieldstory.farm.model.FarmGameModel;
@@ -19,8 +21,12 @@ import com.fieldstory.farm.persistence.FarmStateAdapter;
 import com.fieldstory.farm.persistence.SaveSlot;
 import com.fieldstory.farm.persistence.SaveSlotInfo;
 import com.fieldstory.farm.service.BuffService;
+import com.fieldstory.farm.service.CollectionService;
 import com.fieldstory.farm.service.DecorationService;
+import com.fieldstory.farm.service.FarmScoreService;
+import com.fieldstory.farm.service.GraduationService;
 import com.fieldstory.farm.service.GrowthService;
+import com.fieldstory.farm.service.HarvestOutcome;
 import com.fieldstory.farm.service.HarvestResult;
 import com.fieldstory.farm.service.HarvestService;
 import com.fieldstory.farm.service.HarvestTransactionService;
@@ -35,7 +41,10 @@ import com.fieldstory.farm.service.WitherService;
 import com.fieldstory.farm.service.economy.EconomyService;
 import com.fieldstory.farm.service.economy.impl.EconomyServiceImpl;
 import com.fieldstory.farm.service.impl.BasicBuffService;
+import com.fieldstory.farm.service.impl.BasicCollectionService;
 import com.fieldstory.farm.service.impl.BasicDecorationService;
+import com.fieldstory.farm.service.impl.BasicFarmScoreService;
+import com.fieldstory.farm.service.impl.BasicGraduationService;
 import com.fieldstory.farm.service.impl.BasicGrowthService;
 import com.fieldstory.farm.service.impl.BasicHarvestTransactionService;
 import com.fieldstory.farm.service.impl.BasicLandService;
@@ -300,6 +309,11 @@ public class MainController {
         GameState state = newGame ? gameManager.startNewGame(slot) : gameManager.start(slot);
         Player player = state.getPlayer();
 
+        // E P3：收集图鉴 / FarmScore / 毕业——全部绑定当前 GameState，随存档往返（验收规范 §一百三十二）。
+        CollectionService collectionService = new BasicCollectionService(state);
+        FarmScoreService farmScoreService = new BasicFarmScoreService(state);
+        GraduationService graduationService = new BasicGraduationService(state, farmScoreService);
+
         Farm farm = new BasicFarm();
         FarmGameModel model = new FarmGameModel();
         model.setFarm(farm);
@@ -333,6 +347,8 @@ public class MainController {
             state.setWeatherDayIndex(model.getWeatherState().getDayIndex());
             captureMemories(state, memoryService);
             state.setActiveEvent(model.getEventState());
+            // E P3：落盘前评估毕业；此刻时钟/天数刚刷新，毕业时间戳精确，且首次只触发一次（验收规范 §一百二十九）。
+            graduationService.evaluateAndGraduate();
         });
 
         // B P0 经济入口保持唯一 Player。
@@ -346,7 +362,7 @@ public class MainController {
         WateringService watering = new BasicWateringService();
         GrowthService growth = new BasicGrowthService(watering);
         HarvestService harvest = buildHarvestService(
-                economy, land, model, memoryService, inventory);
+                economy, land, model, memoryService, inventory, collectionService, gameManager::saveNow);
         WitherService wither = new BasicWitherService();
 
         // A 的 FarmView 不改；B 装饰通过透明覆盖层扩展 CENTER。
@@ -356,6 +372,8 @@ public class MainController {
 
         // B P1：装饰状态直接绑定当前 GameState；E 的 SqliteSaveService 负责最终落盘。
         DecorationService decorationService = new BasicDecorationService(farm, state);
+        // E P3：以当前拥有的装饰回填图鉴（兼容 P3 之前的旧档：拥有即已购买、即已解锁）。
+        syncDecorations(collectionService, decorationService);
         BuffService buffService = new BasicBuffService(decorationService);
         ShopService shopService = new BasicShopService(economy, decorationService);
 
@@ -371,6 +389,9 @@ public class MainController {
         // 购买/放置/移动/收回成功后自动保存；B 不直接写 SQL。
         shopController.addOnPurchaseSucceeded(gameManager::saveNow);
         decorationController.addOnChanged(gameManager::saveNow);
+        // E P3：首次成功购买某类型装饰即永久解锁图鉴（去重）；随后 onPurchaseSucceeded 触发落盘。
+        shopController.addOnDecorationPurchased(
+                () -> syncDecorations(collectionService, decorationService));
 
         BusinessToolbarView businessToolbar = new BusinessToolbarView(
                 shopController, decorationController, decorationOverlay);
@@ -451,6 +472,21 @@ public class MainController {
     }
 
     /**
+     * E P3：以「当前拥有的装饰类型」回填装饰图鉴，天然去重。
+     *
+     * <p>拥有即代表已成功购买（B 的装饰库存绑定 GameState），因此该同步既服务首次购买即时解锁，
+     * 也用于读档时补齐 P3 之前旧档的图鉴（验收规范 §一百一十三）。
+     */
+    private static void syncDecorations(CollectionService collectionService,
+                                        DecorationService decorationService) {
+        for (Decoration owned : decorationService.getOwnedDecorations()) {
+            if (owned != null && owned.getDecorationType() != null) {
+                collectionService.collectDecoration(owned.getDecorationType().getId());
+            }
+        }
+    }
+
+    /**
      * 装配 P2 完整收获事务（验收规范 §一百零三），并适配为 A 视图依赖的 {@link HarvestService}。
      *
      * <p>为什么需要这层适配：A 的 {@code FarmViewController} 只依赖 P0 的
@@ -464,7 +500,9 @@ public class MainController {
                                                       LandService land,
                                                       FarmGameModel model,
                                                       MemoryService memoryService,
-                                                      Inventory inventory) {
+                                                      Inventory inventory,
+                                                      CollectionService collectionService,
+                                                      Runnable onCollected) {
         QualityService qualityService = new BasicQualityService();
         LegendaryService legendaryService = new BasicLegendaryService();
         // 神秘商人：事件期间目标作物售价 ×2（规则 §四十九），倍率由 D 的状态决定、C 只读取
@@ -490,7 +528,19 @@ public class MainController {
 
             @Override
             public HarvestResult harvest(Soil soil) {
-                return transaction.harvest(soil, inventory).getResult();
+                Crop crop = soil == null ? null : soil.getCrop();
+                CropType cropType = crop == null ? null : crop.getCropType();
+                HarvestOutcome outcome = transaction.harvest(soil, inventory);
+                if (outcome.isSuccess()) {
+                    // E P3：真正收获 → 该项图鉴永久 COLLECTED；传说突破 → 记入传说图鉴
+                    // （验收规范 §一百一十一，去重由 CollectionState 保证）。随后触发落盘。
+                    collectionService.collectCrop(cropType, outcome.getQuality());
+                    if (outcome.isLegendary()) {
+                        collectionService.collectLegendary(cropType);
+                    }
+                    onCollected.run();
+                }
+                return outcome.getResult();
             }
         };
     }
