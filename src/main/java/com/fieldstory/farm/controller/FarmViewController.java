@@ -138,6 +138,10 @@ public class FarmViewController {
                 if (crop != null && crop.getGrowthStage() == GrowthStage.MATURE) {
                     return List.of(FarmAction.HARVEST);
                 }
+                if (crop != null && crop.getGrowthStage() == GrowthStage.SEED) {
+                    // 规则：种子阶段不能浇水，不给死按钮
+                    return List.of();
+                }
                 return List.of(FarmAction.WATER);
             case LOCKED:
             default:
@@ -247,7 +251,15 @@ public class FarmViewController {
         }
         return buttons;
     }
-
+ /** 按当前土壤状态刷新菜单：无可用动作收起，有则原地重开（连续操作）。 */
+    private void refreshMenu(Soil soil) {
+        List<FarmAction> actions = actionsFor(soil);
+        if (actions.isEmpty()) {
+            farmView.hideMenu();
+        } else {
+            farmView.showMenuFor(soil, buildButtons(soil, actions));
+        }
+    }
     /** 动作按钮文案（UI规范 §12 操作菜单）。 */
     private static String labelFor(FarmAction action) {
         switch (action) {
@@ -293,12 +305,12 @@ public class FarmViewController {
     private void reclaim(Soil soil) {
         ReclaimResult result = landService.reclaim(soil);
         if (result == ReclaimResult.SUCCESS) {
-            farmView.hideMenu();
             farmView.setCurrentGameDay(gameClock.getGameDay());
             farmView.refreshTile(soil);
         } else {
             farmView.showTip(soil, actionMessageFor(result));
         }
+        refreshMenu(soil);
     }
 
     /**
@@ -320,7 +332,7 @@ public class FarmViewController {
     private void plant(Soil soil, CropType type) {
         PlantingResult result = plantingService.plant(soil, type);
         if (result == PlantingResult.SUCCESS) {
-            farmView.hideMenu();
+           refreshMenu(soil);
             farmView.setCurrentGameDay(gameClock.getGameDay());
             farmView.refreshTile(soil);
         } else {
@@ -336,7 +348,7 @@ public class FarmViewController {
         }
         WateringResult result = wateringService.water(crop, gameClock.getGameDay());
         if (result == WateringResult.SUCCESS) {
-            farmView.hideMenu();
+            refreshMenu(soil);
             farmView.setCurrentGameDay(gameClock.getGameDay());
             farmView.refreshTile(soil);
         } else {
@@ -351,8 +363,9 @@ public class FarmViewController {
     private void harvest(Soil soil) {
         HarvestResult result = harvestService.harvest(soil);
         if (result == HarvestResult.SUCCESS) {
-            farmView.hideMenu();
+            farmView.setCurrentGameDay(gameClock.getGameDay());
             farmView.refreshTile(soil);
+            refreshMenu(soil);
         } else {
             farmView.showTip(soil, actionMessageFor(result));
         }
@@ -365,7 +378,7 @@ public class FarmViewController {
      */
     private void clearWithered(Soil soil) {
         landService.removeCropAndSetTilled(soil);
-        farmView.hideMenu();
+        refreshMenu(soil);
         farmView.setCurrentGameDay(gameClock.getGameDay());
         farmView.refreshTile(soil);
     }

@@ -33,13 +33,21 @@ public class WorldStateDao {
      * @param currentWeather   当前天气枚举名（P1 天气接入后写入，可为 null）
      * @param currentDayIndex  当前游戏日索引
      * @param randomSeed       随机种子（可为 null）
+     * @param worldTotalMinutes 世界时钟总分钟（P2，{@code -1} = 旧档未记录，读档退回按天恢复）
      */
     public record WorldStateRow(
             String currentWorldTime,
             String lastRealTime,
             String currentWeather,
             long currentDayIndex,
-            Long randomSeed) {
+            Long randomSeed,
+            long worldTotalMinutes) {
+
+        /** 兼容 P1 五字段口径的构造：世界时钟总分钟按 -1（未记录）处理。 */
+        public WorldStateRow(String currentWorldTime, String lastRealTime, String currentWeather,
+                             long currentDayIndex, Long randomSeed) {
+            this(currentWorldTime, lastRealTime, currentWeather, currentDayIndex, randomSeed, -1L);
+        }
     }
 
     /** 插入世界状态行（id=1）。 */
@@ -47,7 +55,8 @@ public class WorldStateDao {
         Objects.requireNonNull(row, "row 不能为空");
         try (PreparedStatement ps = connection.prepareStatement(
                 "INSERT INTO world_state(id, current_world_time, last_real_time, current_weather,"
-                        + " current_day_index, random_seed) VALUES(1, ?, ?, ?, ?, ?)")) {
+                        + " current_day_index, random_seed, world_total_minutes)"
+                        + " VALUES(1, ?, ?, ?, ?, ?, ?)")) {
             bind(ps, row);
             ps.executeUpdate();
         }
@@ -58,7 +67,8 @@ public class WorldStateDao {
         Objects.requireNonNull(row, "row 不能为空");
         try (PreparedStatement ps = connection.prepareStatement(
                 "UPDATE world_state SET current_world_time = ?, last_real_time = ?,"
-                        + " current_weather = ?, current_day_index = ?, random_seed = ? WHERE id = 1")) {
+                        + " current_weather = ?, current_day_index = ?, random_seed = ?,"
+                        + " world_total_minutes = ? WHERE id = 1")) {
             bind(ps, row);
             ps.executeUpdate();
         }
@@ -72,7 +82,8 @@ public class WorldStateDao {
     public WorldStateRow find() throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement(
                 "SELECT current_world_time, last_real_time, current_weather,"
-                        + " current_day_index, random_seed FROM world_state WHERE id = 1");
+                        + " current_day_index, random_seed, world_total_minutes"
+                        + " FROM world_state WHERE id = 1");
              ResultSet rs = ps.executeQuery()) {
             if (!rs.next()) {
                 return null;
@@ -84,7 +95,8 @@ public class WorldStateDao {
                     rs.getString("last_real_time"),
                     rs.getString("current_weather"),
                     rs.getLong("current_day_index"),
-                    randomSeed);
+                    randomSeed,
+                    rs.getLong("world_total_minutes"));
         }
     }
 
@@ -105,5 +117,6 @@ public class WorldStateDao {
         } else {
             ps.setLong(5, row.randomSeed());
         }
+        ps.setLong(6, row.worldTotalMinutes());
     }
 }

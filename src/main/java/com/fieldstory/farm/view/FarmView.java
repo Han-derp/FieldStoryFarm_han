@@ -267,7 +267,7 @@ public class FarmView extends Pane {
     /**
      * 纯函数：悬停提示文案（UI规范 §10）。
      *
-     * <p>六种文案：null=装饰区可放置装饰、EMPTY=未开垦、TILLED=已开垦可播种、
+     * <p>六种文案：null=装饰区占位、EMPTY=未开垦、TILLED=已开垦可播种、
      * PLANTED=作物名+成长x%+今日已浇/未浇、MATURE=已成熟可收获、
      * WITHERED=已枯萎，请铲除（P1，规则 §16.5）。
      *
@@ -277,7 +277,7 @@ public class FarmView extends Pane {
      */
     public static String tooltipTextFor(Soil soil, long currentGameDay) {
         if (soil == null) {
-            return "装饰区，可放置装饰";
+            return "装饰区（P0 占位）";
         }
         switch (soil.getState()) {
             case EMPTY:
@@ -322,7 +322,7 @@ public class FarmView extends Pane {
                 tile.setStrokeWidth(1);
                 Tooltip tooltip = new Tooltip(tooltipTextFor(soil, currentGameDay));
                 tooltip.setShowDelay(Duration.millis(100));     // 默认 1000ms 太慢
-                tooltip.setShowDuration(Duration.seconds(20));   // 长文案给足停留时间
+                tooltip.setShowDuration(Duration.INDEFINITE);   // 悬停常显：鼠标移开才消失
                 tooltip.setHideDelay(Duration.millis(100));     // 移开后 100ms 收起，不突兀
                 Tooltip.install(tile, tooltip);
                 int clickedRow = row;
@@ -405,6 +405,11 @@ public class FarmView extends Pane {
         selectionRect.setX(soil.getColumn() * TILE_SIZE);
         selectionRect.setY(soil.getRow() * TILE_SIZE);
         selectionRect.setVisible(true);
+        // 点击会隐藏 Tooltip（JavaFX 默认）；选中后立刻重开，
+        // 鼠标不离开格子也能持续看到状态
+        tooltips[soil.getRow()][soil.getColumn()]
+                .show(tiles[soil.getRow()][soil.getColumn()],
+                        TILE_SIZE / 2.0, TILE_SIZE / 2.0);
     }
 
     /** 注册 FARM_PLOT 格点击回调（装饰区点击传入 null）。 */

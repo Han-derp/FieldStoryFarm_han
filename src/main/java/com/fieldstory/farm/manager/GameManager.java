@@ -2,26 +2,30 @@ package com.fieldstory.farm.manager;
 
 import com.fieldstory.farm.model.GameState;
 import com.fieldstory.farm.model.Player;
-import com.fieldstory.farm.persistence.SqliteSaveService;
+import com.fieldstory.farm.persistence.SaveSlot;
+import com.fieldstory.farm.persistence.SaveSlotInfo;
+import com.fieldstory.farm.persistence.SaveSlotManager;
 import com.fieldstory.farm.service.SaveService;
 import com.fieldstory.farm.util.GameConstants;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
  * 游戏管理器（E 存档与引擎模块；脚手架 §七 manager 包：GameManager/SceneManager）。
  *
- * <p>职责（模块分工 E 行 P0：GameManager）：
+ * <p>职责（模块分工 E 行 P0/P2：GameManager）：
  * <ul>
  *   <li>全局唯一入口（单例，{@link #getInstance()}）；测试可经构造器注入 SaveService；</li>
  *   <li>游戏状态机：主菜单 → 游戏中 → 暂停 → 退出（{@link GamePhase}）；</li>
  *   <li>生命周期：Init（构造装配）→ start（读档/新档）→ 游玩 → saveNow（手动/关键节点）
  *       → saveAndExit（退出，验收 §四十二：保存→记录世界时间→退出）；</li>
- *   <li>模块协调：统一持有并初始化各系统引用（当前为 SaveService 与会话状态 GameState；
- *       经济/土地/天气/时钟系统由 A/B/C/D 交付后在此统一装配，本管理器不越层实现业务）。</li>
+ *   <li><b>P2 三存档位</b>：所有读档/写档都作用于 {@link #currentSlot()}，
+ *       由 {@link SaveSlotManager} 把存档位映射到各自的存档文件（见 {@link SaveSlot}）；
+ *       主菜单需要的各档摘要由 {@link #allSlotInfos()} 提供。</li>
  * </ul>
  *
- * <p>P0 退出后不推进世界（离线模拟属 P2）；读档只恢复退出瞬间状态。
+ * <p>P2 起离线模拟属 B 模块；本管理器只负责"读回内存 / 写到文件"，不做任何离线成长。
  */
 public class GameManager {
 
@@ -33,10 +37,15 @@ public class GameManager {
 
     private static final String DEFAULT_PLAYER_NAME = "农夫";
 
-    /** 全局唯一实例（单例，P1 起默认 {@link SqliteSaveService} 写 {@code data/farm.db}） */
+    /** 全局唯一实例（单例，P1 起默认 SQLite 存档；P2 起默认三个存档位各一个 .db 文件） */
     private static volatile GameManager instance;
 
-    private final SaveService saveService;
+    /** 存档位管理器：把存档位映射到各自的存档服务（P2 三存档位）。 */
+    private final SaveSlotManager slotManager;
+
+    /** 当前存档位：所有读档/写档都作用于它（默认存档 1）。 */
+    private SaveSlot currentSlot;
+
     private GameState state;
     private GamePhase phase;
 
@@ -48,25 +57,39 @@ public class GameManager {
     private Runnable beforeSaveHook;
 
     /**
-     * 构造管理器并装配存档服务。
+     * 构造管理器并装配单个存档服务（兼容 P0/P1 单档装配与既有测试）。
+     *
+     * <p>此构造下三个存档位共用同一实现，语义等同"只有一个存档位"；
+     * 需要真正的多档请用 {@link #GameManager(SaveSlotManager)}。
      *
      * @param saveService 存档服务（测试可注入内存/临时文件实现）
      */
     public GameManager(SaveService saveService) {
-        this.saveService = Objects.requireNonNull(saveService, "SaveService 不能为空");
+        this(SaveSlotManager.single(saveService));
+    }
+
+    /**
+     * 构造管理器并装配多存档位。
+     *
+     * @param slotManager 存档位管理器
+     */
+    public GameManager(SaveSlotManager slotManager) {
+        this.slotManager = Objects.requireNonNull(slotManager, "slotManager 不能为空");
+        this.currentSlot = SaveSlot.first();
         this.phase = GamePhase.MAIN_MENU;
     }
 
     /**
-     * 全局唯一实例（单例）：P1 起默认使用 {@link SqliteSaveService}（{@code data/farm.db}，
-     * 首次运行会把旧 {@code data/save.json} 一次性迁移进 SQLite，验收规范 §七十四）。
+     * 全局唯一实例（单例）：P2 起为三个存档位各一个 SQLite 文件
+     * （{@link SaveSlot#databaseFile()}），首次运行会把旧 {@code data/save.json}
+     * 一次性迁移进"存档 1"（验收规范 §七十四）。
      * 全游戏共享此入口。
      */
     public static GameManager getInstance() {
         if (instance == null) {
             synchronized (GameManager.class) {
                 if (instance == null) {
-                    instance = new GameManager(new SqliteSaveService());
+                    instance = new GameManager(SaveSlotManager.defaultManager());
                 }
             }
         }
@@ -86,13 +109,43 @@ public class GameManager {
         return state;
     }
 
-    /** 是否存在可恢复的历史存档。 */
+    /** 是否存在可恢复的历史存档（当前存档位）。 */
     public boolean hasSavedGame() {
-        return saveService.hasSave();
+        return hasSavedGame(currentSlot);
+    }
+
+    /** 指定存档位是否存在可恢复的历史存档。 */
+    public boolean hasSavedGame(SaveSlot slot) {
+        return slotManager.hasSave(slot);
+    }
+
+    /** 当前存档位。 */
+    public SaveSlot currentSlot() {
+        return currentSlot;
+    }
+
+    /** 指定存档位的主菜单摘要（空档 / 第 N 天 / 金币 / 存档时间）。 */
+    public SaveSlotInfo slotInfo(SaveSlot slot) {
+        return slotManager.describe(slot);
+    }
+
+    /** 全部存档位摘要（按序号升序，供主菜单逐行展示）。 */
+    public List<SaveSlotInfo> allSlotInfos() {
+        return slotManager.describeAll();
+    }
+
+    /** 下一个可用的新存档位（现有最大序号 + 1，无存档时为存档 1）。 */
+    public SaveSlot nextSlot() {
+        return slotManager.nextSlot();
+    }
+
+    /** 当前存档位的存档服务（读档/写档的唯一出口）。 */
+    private SaveService activeService() {
+        return slotManager.service(currentSlot);
     }
 
     /**
-     * 开始游戏（主菜单 → 游戏中）：
+     * 开始游戏（主菜单 → 游戏中），使用当前存档位：
      * <pre>
      * 有存档 → 读取数据库（P1：SQLite）恢复到退出瞬间（不做离线成长）
      * 无存档 → 新建游戏（金币 500，游戏天数 0）
@@ -102,27 +155,61 @@ public class GameManager {
      * @return 当前会话游戏状态
      */
     public GameState start() {
-        if (state == null) {
-            try {
-                if (saveService.hasSave()) {
-                    state = saveService.load();
-                }
-            } catch (IllegalStateException e) {
-                System.err.println("[GameManager] 存档不可用，将新建游戏: " + e.getMessage());
-                state = null;
-            }
-            if (state == null) {
-                state = newGame();
-            }
+        return start(currentSlot);
+    }
+
+    /**
+     * 在指定存档位开始游戏（读取该档；无档则新建）。
+     *
+     * <p>切换到<b>不同</b>存档位时会重新读档（会话状态属于存档位，不能串档）；
+     * 对同一存档位重复调用则复用当前会话（与 P0/P1 的 {@code start()} 语义一致）。
+     * 之后的 {@link #saveNow()} 也写回当前存档位，保证"在哪档玩，存档就落在哪档"。
+     *
+     * @param slot 目标存档位
+     * @return 当前会话游戏状态
+     */
+    public GameState start(SaveSlot slot) {
+        SaveSlot target = Objects.requireNonNull(slot, "slot 不能为空");
+        boolean slotChanged = target != currentSlot;
+        this.currentSlot = target;
+        if (state == null || slotChanged) {
+            state = loadOrCreate();
         }
         phase = GamePhase.PLAYING;
         return state;
     }
 
+    /** 有档则读档（损坏时降级新建），无档则新建；绝不因读档失败阻断启动。 */
+    private GameState loadOrCreate() {
+        SaveService saveService = activeService();
+        try {
+            if (saveService.hasSave()) {
+                GameState loaded = saveService.load();
+                if (loaded != null) {
+                    return loaded;
+                }
+            }
+        } catch (IllegalStateException e) {
+            System.err.println("[GameManager] 存档不可用，将新建游戏: " + e.getMessage());
+        }
+        return newGame();
+    }
+
     /**
-     * 直接开始新游戏会话（不读旧档，也不写盘；调用 {@link #saveNow()} 后落盘）。
+     * 在当前存档位直接开始新游戏会话（不读旧档，也不写盘；调用 {@link #saveNow()} 后落盘）。
      */
     public GameState startNewGame() {
+        return startNewGame(currentSlot);
+    }
+
+    /**
+     * 在指定存档位开始新游戏（覆盖该档的旧进度需玩家显式确认，见 {@code MainController}）。
+     *
+     * @param slot 目标存档位
+     * @return 全新会话游戏状态
+     */
+    public GameState startNewGame(SaveSlot slot) {
+        this.currentSlot = Objects.requireNonNull(slot, "slot 不能为空");
         state = newGame();
         phase = GamePhase.PLAYING;
         return state;
@@ -137,14 +224,14 @@ public class GameManager {
     }
 
     /**
-     * 手动 / 关键节点（如每日结束）自动保存：把当前会话状态写入存档，不改变阶段。
+     * 手动 / 关键节点（如每日结束）自动保存：把当前会话状态写入<b>当前存档位</b>，不改变阶段。
      */
     public void saveNow() {
         if (state == null) {
             throw new IllegalStateException("游戏尚未启动，无法保存");
         }
         refreshBeforeSave();
-        saveService.save(state);
+        activeService().save(state);
     }
 
     /**
@@ -164,13 +251,13 @@ public class GameManager {
     }
 
     /**
-     * 退出游戏：保存当前状态后进入 {@link GamePhase#EXITING}。
+     * 退出游戏：把当前状态保存到<b>当前存档位</b>后进入 {@link GamePhase#EXITING}。
      * （验收 §四十二：保存当前状态 → 记录世界时间 → 退出；退出后不推进世界。）
      */
     public void saveAndExit() {
         if (state != null && (phase == GamePhase.PLAYING || phase == GamePhase.PAUSED)) {
             refreshBeforeSave();
-            saveService.save(state);
+            activeService().save(state);
         }
         phase = GamePhase.EXITING;
     }

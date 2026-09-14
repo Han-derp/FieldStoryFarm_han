@@ -9,33 +9,46 @@ import java.util.List;
 /**
  * SQLite 结构版本迁移器（E 模块 P1；验收规范 §七十一~§七十五）。
  *
- * <p><b>为什么要它</b>：P1 起 {@code data/farm.db} 是唯一正式存档，若结构版本与字段/表随时间
- * 演进，旧存档必须能原样升级，否则玩家重建农场或丢档。这里用 SQLite 自带的
- * {@code PRAGMA user_version} 记录<b>当前结构版本</b>，
- * 启动时把低于程序版本的旧库逐级升级到新版（每步迁移只做增量 DDL，不重建已有表）。
+ * <p><b>为什么要它：</b>P1 起 {@code data/farm.db} 是唯一正式运行存档。后续版本新增字段/表时，
+ * 必须让旧存档“原地升级”而不是丢弃重建，否则玩家的农场数据会丢。
+ * 本类用 SQLite 内置的 {@code PRAGMA user_version} 记录<b>当前结构版本</b>，
+ * 启动时把低于程序版本的旧库逐级升级到最新版（每级迁移只做增量 DDL，不重建已有表）。
  *
- * <p><b>设计约束</b>
+ * <p><b>升级规则：</b>
  * <ul>
- *   <li>每个 {@link MigrationStep} 的 {@code version} 是「执行完该步后对应的版本号」；</li>
- *   <li>只执行版本号大于当前 {@code user_version} 的步骤，因此对同一库重复运行是幂等的；</li>
- *   <li>若库版本高于程序支持的 {@link #SCHEMA_VERSION}（用户装了更新程序），
- *       直接首次拒绝打开，避免用旧程序写入新结构。</li>
+ *   <li>每个 {@link MigrationStep} 的 {@code version} 是“执行完该步后库应处于的版本”；</li>
+ *   <li>只执行版本号大于当前 {@code user_version} 的步骤，因此对同一库重复调用是幂等的；</li>
+ *   <li>若库版本高于程序支持的 {@link #SCHEMA_VERSION}（用户装了更新版程序后又回退），
+ *       直接抛错拒绝启动，避免用旧程序写坏新结构。</li>
  * </ul>
  *
- * <p><b>v1 建表清单（验收规范 §七十三 最低表 + E 持久化内部表）</b>：
+ * <p><b>P1 v1 建表清单（验收规范 §七十二 最低表 + E 持久化内部辅助表）：</b>
  * player / player_seed / unlocked / farm / soil / crop / decoration / world_state / meta。
- * 其中 player_seed、unlocked、meta 是 E 持久化内部表（种子背包、已解锁内容、迁移标记），
- * 不属于独立游戏系统。
+ * 其中 player_seed、unlocked、meta 是 E 侧持久化辅助表（种子库存、已解锁内容、迁移标记），
+ * 不属于额外游戏系统。
  *
- * <p><b>v2 建表清单（P2 随机事件系统，验收规范 §九十一）</b>：
- * active_event（当前生效事件，退出重进不丢失）。
+ * <p><b>P2 v2 增量（验收规范 §九十一/§九十三/§一百零四）：</b>
+ * <ul>
+ *   <li>{@code crop_memory}：作物生命记忆档案（收获后永久保留，§九十五）；</li>
+ *   <li>{@code active_event}：当前随机事件快照（事件期间退出，回来不能凭空消失，§九十一）；</li>
+ *   <li>{@code player_item}：玩家背包物品（C 模块 {@code Inventory} 的持久化映射）；</li>
+ *   <li>{@code world_state.world_total_minutes}：世界时钟总分钟，用于把"退出瞬间"精确恢复。</li>
+ * </ul>
+ *
+ * <p><b>条件加列语法：</b>迁移语句以 {@value #ADD_COLUMN_PREFIX} 开头时表示"若该列不存在才加"，
+ * 形如 {@code ADD COLUMN world_state.world_total_minutes INTEGER NOT NULL DEFAULT -1}。
+ * SQLite 的 {@code ADD COLUMN} 在列已存在时会直接报错，而这个语法让迁移对
+ * "被回退过版本号的库"、"半成品库" 依旧幂等（见 {@code MigrationTest}）。
  */
 public final class SchemaMigrator {
 
-    /** 当前支持的数据库结构版本（新增表/字段时递增 +1 并追加迁移步骤）。 */
+    /** 程序当前支持的数据库结构版本。新增表/字段时必须 +1 并追加迁移步骤。 */
     public static final int SCHEMA_VERSION = 2;
 
-    /** 全部迁移步骤，按版本递增。 */
+    /** 「条件加列」语句前缀：列已存在时跳过，保证迁移幂等。 */
+    static final String ADD_COLUMN_PREFIX = "ADD COLUMN ";
+
+    /** 全部迁移步骤，按版本升序。 */
     private static final List<MigrationStep> STEPS = List.of(stepToV1(), stepToV2());
 
     private SchemaMigrator() {
@@ -50,19 +63,17 @@ public final class SchemaMigrator {
         }
     }
 
-    /** 将数据库升级到最新 {@link #SCHEMA_VERSION}，幂等（重复运行不做任何事）。 */
+    /** 把数据库逐级升级到 {@link #SCHEMA_VERSION}；已是最新则什么都不做。 */
     public static void migrate(Connection connection) throws SQLException {
         int current = readVersion(connection);
         if (current > SCHEMA_VERSION) {
             throw new IllegalStateException("数据库结构版本(" + current + ")高于程序支持版本("
-                    + SCHEMA_VERSION + ")，请使用更新版本的程序");
+                    + SCHEMA_VERSION + ")，请使用更新版本的程序打开");
         }
         for (MigrationStep step : STEPS) {
             if (step.version() > current) {
-                for (String ddl : step.statements()) {
-                    try (Statement statement = connection.createStatement()) {
-                        statement.executeUpdate(ddl);
-                    }
+                for (String statement : step.statements()) {
+                    executeStatement(connection, statement);
                 }
                 setVersion(connection, step.version());
                 current = step.version();
@@ -70,14 +81,61 @@ public final class SchemaMigrator {
         }
     }
 
-    /** 写入结构版本号（{@code PRAGMA user_version} 不支持占位符，版本为 int 常量，无注入风险）。 */
+    /** 执行一条迁移语句；带 {@link #ADD_COLUMN_PREFIX} 前缀时为「条件加列」（列已存在则跳过）。 */
+    private static void executeStatement(Connection connection, String statement) throws SQLException {
+        if (!statement.startsWith(ADD_COLUMN_PREFIX)) {
+            runStatement(connection, statement);
+            return;
+        }
+        String rest = statement.substring(ADD_COLUMN_PREFIX.length()).trim();
+        int split = rest.indexOf(' ');
+        if (split < 0) {
+            throw new IllegalStateException("条件加列语句缺少列定义: " + statement);
+        }
+        String target = rest.substring(0, split);
+        String definition = rest.substring(split + 1);
+        int dot = target.indexOf('.');
+        if (dot < 0) {
+            throw new IllegalStateException("条件加列语句缺少 表.列 目标: " + statement);
+        }
+        String table = target.substring(0, dot);
+        String column = target.substring(dot + 1);
+        if (columnExists(connection, table, column)) {
+            return;
+        }
+        // 表名/列名来自本类常量，非外部输入，无注入风险
+        runStatement(connection, "ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
+    }
+
+    /** 执行单条 DDL。 */
+    private static void runStatement(Connection connection, String ddl) throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            statement.executeUpdate(ddl);
+        }
+    }
+
+    /** 判断表中是否已存在某列（{@code PRAGMA table_info}）。 */
+    private static boolean columnExists(Connection connection, String table, String column)
+            throws SQLException {
+        try (Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery("PRAGMA table_info(" + table + ")")) {
+            while (rs.next()) {
+                if (column.equalsIgnoreCase(rs.getString("name"))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    /** 写入结构版本号（{@code PRAGMA user_version} 不支持占位符，版本为 int 无注入风险）。 */
     private static void setVersion(Connection connection, int version) throws SQLException {
         try (Statement statement = connection.createStatement()) {
             statement.executeUpdate("PRAGMA user_version = " + version);
         }
     }
 
-    /** v0 → v1：首次建立 P1 全表（IF NOT EXISTS 保证对半成品库也安全）。 */
+    /** v0 → v1：首次建立 P1 全部表（IF NOT EXISTS 保证对半成品库也安全）。 */
     private static MigrationStep stepToV1() {
         return new MigrationStep(1, List.of(
                 "CREATE TABLE IF NOT EXISTS player ("
@@ -113,8 +171,8 @@ public final class SchemaMigrator {
                         + " decoration_type TEXT NOT NULL,"
                         + " row_index INTEGER NOT NULL,"
                         + " col_index INTEGER NOT NULL)",
-                // world_state 有固定五列（验收规范 §七十三）：current_world_time/last_real_time/
-                // current_weather/current_day_index/random_seed，P2 离线模拟与天气复用此结构
+                // world_state 列固定承载 §七十三：current_world_time/last_real_time/
+                // current_weather/current_day_index/random_seed，P2 离线模拟无需推翻结构
                 "CREATE TABLE IF NOT EXISTS world_state ("
                         + " id INTEGER PRIMARY KEY CHECK (id = 1),"
                         + " current_world_time TEXT,"
@@ -122,32 +180,57 @@ public final class SchemaMigrator {
                         + " current_weather TEXT,"
                         + " current_day_index INTEGER NOT NULL DEFAULT 0,"
                         + " random_seed INTEGER)",
-                // meta：E 持久化内部键值（JSON 一次性迁移标记等），不承载任何游戏业务
+                // meta：E 持久化内部键值（JSON 一次性迁移标记等），不承载游戏业务
                 "CREATE TABLE IF NOT EXISTS meta ("
                         + " meta_key TEXT PRIMARY KEY,"
                         + " meta_value TEXT NOT NULL)"));
     }
 
     /**
-     * v1 → v2：P2 随机事件系统新增 {@code active_event} 表（验收规范 §九十一）。
+     * v1 → v2：P2 记忆/事件持久化增量（只加表与一列，不动既有列，旧档原地升级不丢数据）。
      *
-     * <p>五列与 {@code EventState} 一一对应：{@code event_type}（枚举 {@code name()}）、
-     * {@code start_world_time}、{@code end_world_time}（游戏小时）、
-     * {@code target_crop_type}（神秘商人指定作物，可空）、{@code payload}（附加数据，可空）。
-     * 单人存档约定该表恒为 0 行或 1 行（{@code id = 1}）。
+     * <p>{@code crop_memory} 键为 {@code crop_uuid}（生命周期唯一，§九十三），
+     * 与 {@code crop} 表<b>无外键</b>：收获后当前作物行会随土地清空而删除，
+     * 但记忆档案必须永久保留（§九十五），因此不能级联删除。
      */
     private static MigrationStep stepToV2() {
         return new MigrationStep(2, List.of(
+                "CREATE TABLE IF NOT EXISTS crop_memory ("
+                        + " crop_uuid TEXT PRIMARY KEY,"
+                        + " crop_type TEXT,"
+                        + " plant_world_time INTEGER NOT NULL DEFAULT -1,"
+                        + " mature_world_time INTEGER NOT NULL DEFAULT -1,"
+                        + " harvest_world_time INTEGER NOT NULL DEFAULT -1,"
+                        + " manual_water_count INTEGER NOT NULL DEFAULT 0,"
+                        + " rain_count INTEGER NOT NULL DEFAULT 0,"
+                        + " drought_count INTEGER NOT NULL DEFAULT 0,"
+                        + " green_rain_count INTEGER NOT NULL DEFAULT 0,"
+                        + " fertilizer_count INTEGER NOT NULL DEFAULT 0,"
+                        + " last_drought_game_day INTEGER NOT NULL DEFAULT -1,"
+                        + " water_rescue INTEGER NOT NULL DEFAULT 0,"
+                        + " events TEXT,"
+                        + " wither_risk INTEGER NOT NULL DEFAULT 0,"
+                        + " quality TEXT,"
+                        + " legendary INTEGER NOT NULL DEFAULT 0,"
+                        + " final_story TEXT)",
+                // active_event：单行表（id=1），字段沿用验收 §九十一
                 "CREATE TABLE IF NOT EXISTS active_event ("
                         + " id INTEGER PRIMARY KEY CHECK (id = 1),"
-                        + " event_type TEXT,"
+                        + " event_type TEXT NOT NULL,"
                         + " start_world_time INTEGER NOT NULL DEFAULT 0,"
                         + " end_world_time INTEGER NOT NULL DEFAULT 0,"
                         + " target_crop_type TEXT,"
-                        + " payload TEXT)"));
+                        + " payload TEXT)",
+                // player_item：玩家背包物品（C 模块 Inventory 的快照，item_type 唯一）
+                "CREATE TABLE IF NOT EXISTS player_item ("
+                        + " item_type TEXT PRIMARY KEY,"
+                        + " quantity INTEGER NOT NULL CHECK (quantity >= 0),"
+                        + " unit_price INTEGER NOT NULL DEFAULT 0)",
+                // 条件加列：世界时钟总分钟（退出瞬间精确恢复；-1 = 未记录，按旧档按天恢复）
+                ADD_COLUMN_PREFIX + "world_state.world_total_minutes INTEGER NOT NULL DEFAULT -1"));
     }
 
-    /** 单步迁移：执行完 {@code version} 的 DDL 后，结构版本应等于 {@code version}。 */
+    /** 单个迁移步骤：执行完 {@code version} 所列 DDL 后，库结构版本应等于 {@code version}。 */
     private record MigrationStep(int version, List<String> statements) {
     }
 }
