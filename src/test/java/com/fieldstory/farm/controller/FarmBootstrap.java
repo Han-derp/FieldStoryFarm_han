@@ -138,7 +138,7 @@ public final class FarmBootstrap {
 
         // A 的视图控制器（挂 CENTER）
         FarmViewController farmViewController = new FarmViewController(
-                farm, landService, plantingService, wateringService, harvestService, gameClock);
+                farm, landService, plantingService, wateringService, harvestService, gameClock, economy);
         farmViewController.mountToScene();
 
         // D 的模型聚合 + 状态栏（挂 TOP）：显示游戏日/时间/金币/天气（P0 固定晴天）

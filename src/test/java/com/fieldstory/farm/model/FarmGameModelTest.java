@@ -93,6 +93,34 @@ class FarmGameModelTest {
     }
 
     @Test
+    void restoreWeatherSetsTypeAndDayIndex() {
+        FarmGameModel model = new FarmGameModel();
+        model.restoreWeather("DROUGHT", 9);
+        assertEquals(WeatherType.DROUGHT, model.getWeatherState().getWeatherType(),
+                "restoreWeather 应还原天气枚举（验收 §七十三）");
+        assertEquals(9, model.getWeatherState().getDayIndex(),
+                "restoreWeather 应还原天气日索引（验收 §七十三）");
+    }
+
+    @Test
+    void restoreWeatherWithNullKeepsDefaultSunny() {
+        FarmGameModel model = new FarmGameModel();
+        model.restoreWeather(null, 3);
+        assertEquals(WeatherType.SUNNY, model.getWeatherState().getWeatherType(),
+                "无天气记录时应保持默认晴天（D 模块 P1 文档 §4.1）");
+        assertEquals(3, model.getWeatherState().getDayIndex());
+    }
+
+    @Test
+    void restoreWeatherWithUnknownNameDegradesToSunny() {
+        FarmGameModel model = new FarmGameModel();
+        model.restoreWeather("NOT_A_WEATHER", 4);
+        assertEquals(WeatherType.SUNNY, model.getWeatherState().getWeatherType(),
+                "无法识别的天气名应降级为晴天，不抛异常（坏数据不阻断读档）");
+        assertEquals(4, model.getWeatherState().getDayIndex());
+    }
+
+    @Test
     void eventServiceAndStateAreAggregatedAndNonNull() {
         FarmGameModel model = new FarmGameModel();
         assertNotNull(model.getEventService(), "P2 应聚合 EventService");
