@@ -35,6 +35,7 @@ import com.fieldstory.farm.service.LegendaryService;
 import com.fieldstory.farm.service.MemoryService;
 import com.fieldstory.farm.service.PlantingService;
 import com.fieldstory.farm.service.QualityService;
+import com.fieldstory.farm.service.SetService;
 import com.fieldstory.farm.service.ShopService;
 import com.fieldstory.farm.service.WateringService;
 import com.fieldstory.farm.service.WitherService;
@@ -52,6 +53,7 @@ import com.fieldstory.farm.service.impl.BasicLegendaryService;
 import com.fieldstory.farm.service.impl.BasicMemoryService;
 import com.fieldstory.farm.service.impl.BasicPlantingService;
 import com.fieldstory.farm.service.impl.BasicQualityService;
+import com.fieldstory.farm.service.impl.BasicSetService;
 import com.fieldstory.farm.service.impl.BasicShopService;
 import com.fieldstory.farm.service.impl.BasicWateringService;
 import com.fieldstory.farm.service.impl.BasicWitherService;
@@ -374,6 +376,10 @@ public class MainController {
         DecorationService decorationService = new BasicDecorationService(farm, state);
         // E P3：以当前拥有的装饰回填图鉴（兼容 P3 之前的旧档：拥有即已购买、即已解锁）。
         syncDecorations(collectionService, decorationService);
+        // E P3：套装 = 全部成员「拥有且放置」；collected 永久、active 随放置实时变化（验收规范 §一百一十八）。
+        // 读档后立即重算一次，使 active 与已恢复的放置状态一致。
+        SetService setService = new BasicSetService(decorationService, state);
+        setService.refresh();
         BuffService buffService = new BasicBuffService(decorationService);
         ShopService shopService = new BasicShopService(economy, decorationService);
 
@@ -388,10 +394,16 @@ public class MainController {
 
         // 购买/放置/移动/收回成功后自动保存；B 不直接写 SQL。
         shopController.addOnPurchaseSucceeded(gameManager::saveNow);
-        decorationController.addOnChanged(gameManager::saveNow);
+        // E P3：放置/移动/收回成功 → 先重算套装 collected/active，再落盘（collected 才计入 FarmScore）。
+        decorationController.addOnChanged(() -> {
+            setService.refresh();
+            gameManager.saveNow();
+        });
         // E P3：首次成功购买某类型装饰即永久解锁图鉴（去重）；随后 onPurchaseSucceeded 触发落盘。
-        shopController.addOnDecorationPurchased(
-                () -> syncDecorations(collectionService, decorationService));
+        shopController.addOnDecorationPurchased(() -> {
+            syncDecorations(collectionService, decorationService);
+            setService.refresh();
+        });
 
         BusinessToolbarView businessToolbar = new BusinessToolbarView(
                 shopController, decorationController, decorationOverlay);
