@@ -12,6 +12,8 @@
     </padding>
 
     <Label fx:id="welcomeText"/>
-    <Button text="开始新游戏" onAction="#onNewGameButtonClick"/>
-    <Button text="读取存档" onAction="#onLoadButtonClick"/>
+
+    <!-- P2 无限存档位：新建入口 + 已存在存档列表（每行由 MainController 装配） -->
+    <Button fx:id="newSaveButton" text="新建存档" onAction="#onNewSaveButtonClick"/>
+    <VBox fx:id="slotList" alignment="CENTER_LEFT" spacing="10.0"/>
 </VBox>
