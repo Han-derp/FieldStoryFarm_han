@@ -1,6 +1,7 @@
 package com.fieldstory.farm.persistence;
 
 import com.fieldstory.farm.model.CropType;
+import com.fieldstory.farm.model.EventState;
 import com.fieldstory.farm.model.EventType;
 import com.fieldstory.farm.model.GameState;
 import com.fieldstory.farm.model.Player;
@@ -23,8 +24,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>覆盖验收规范 §九十一：{@code active_event} 五列
  * （{@code event_type}/{@code start_world_time}/{@code end_world_time}/
- * {@code target_crop_type}/{@code payload}）与 {@code EventState} 一一映射，
- * 且「游戏内事件仅在期间退出重进，事件记录不凭据消失」。
+ * {@code target_crop_type}/{@code payload}）与 {@link EventState} 一一映射，
+ * 且「游戏内事件仅在期间退出重进，事件记录不凭空消失」。
+ *
+ * <p>DAO 口径与 E 现行实现一致：{@link ActiveEventDao} 以 {@link EventState} 为读写单元
+ * （{@code upsert/find/deleteAll}），不再单独暴露字符串行对象。
  */
 class ActiveEventPersistenceTest {
 
@@ -54,24 +58,26 @@ class ActiveEventPersistenceTest {
             ActiveEventDao dao = new ActiveEventDao(connection);
             assertNull(dao.find(), "空表应返回 null");
 
-            dao.insert(new ActiveEventDao.ActiveEventRow(
-                    EventType.MYSTERY_MERCHANT.name(), 50L, 62L, CropType.CORN.name(), "reward"));
-            ActiveEventDao.ActiveEventRow row = dao.find();
-            assertNotNull(row);
-            assertEquals("MYSTERY_MERCHANT", row.eventType());
-            assertEquals(50L, row.startWorldTime());
-            assertEquals(62L, row.endWorldTime());
-            assertEquals("CORN", row.targetCropType());
-            assertEquals("reward", row.payload());
+            BasicEventState merchant = new BasicEventState(EventType.MYSTERY_MERCHANT, 50L, 62L);
+            merchant.setTargetCropType(CropType.CORN);
+            merchant.setPayload("reward");
+            dao.upsert(merchant);
 
-            dao.update(new ActiveEventDao.ActiveEventRow(
-                    EventType.METEOR_SHOWER.name(), 100L, 124L, null, null));
-            ActiveEventDao.ActiveEventRow updated = dao.find();
-            assertEquals("METEOR_SHOWER", updated.eventType());
-            assertEquals(100L, updated.startWorldTime());
-            assertEquals(124L, updated.endWorldTime());
-            assertNull(updated.targetCropType());
-            assertNull(updated.payload());
+            EventState stored = dao.find();
+            assertNotNull(stored);
+            assertEquals(EventType.MYSTERY_MERCHANT, stored.getEventType());
+            assertEquals(50L, stored.getStartWorldTime());
+            assertEquals(62L, stored.getEndWorldTime());
+            assertEquals(CropType.CORN, stored.getTargetCropType());
+            assertEquals("reward", stored.getPayload());
+
+            dao.upsert(new BasicEventState(EventType.METEOR_SHOWER, 100L, 124L));
+            EventState updated = dao.find();
+            assertEquals(EventType.METEOR_SHOWER, updated.getEventType());
+            assertEquals(100L, updated.getStartWorldTime());
+            assertEquals(124L, updated.getEndWorldTime());
+            assertNull(updated.getTargetCropType());
+            assertNull(updated.getPayload());
 
             dao.deleteAll();
             assertNull(dao.find());
@@ -84,19 +90,18 @@ class ActiveEventPersistenceTest {
         SqliteSaveService save = new SqliteSaveService(db, null);
 
         GameState state = new GameState(new Player("农夫", 500), 3L);
-        state.setCurrentEventType(EventType.METEOR_SHOWER.name());
-        state.setEventStartWorldTime(72L);
-        state.setEventEndWorldTime(96L);
+        state.setActiveEvent(new BasicEventState(EventType.METEOR_SHOWER, 72L, 96L));
         save.save(state);
 
         // ---------- 退出重进 ----------
         SqliteSaveService reopened = new SqliteSaveService(db, null);
         GameState loaded = reopened.load();
         assertNotNull(loaded);
-        assertEquals("METEOR_SHOWER", loaded.getCurrentEventType(),
+        assertNotNull(loaded.getActiveEvent(), "事件应跨退出重进恢复（验收 §九十一）");
+        assertEquals(EventType.METEOR_SHOWER, loaded.getActiveEvent().getEventType(),
                 "事件类型应跨退出重进恢复（验收 §九十一）");
-        assertEquals(72L, loaded.getEventStartWorldTime());
-        assertEquals(96L, loaded.getEventEndWorldTime());
+        assertEquals(72L, loaded.getActiveEvent().getStartWorldTime());
+        assertEquals(96L, loaded.getActiveEvent().getEndWorldTime());
     }
 
     @Test
@@ -105,18 +110,17 @@ class ActiveEventPersistenceTest {
         SqliteSaveService save = new SqliteSaveService(db, null);
 
         GameState state = new GameState(new Player("农夫", 500), 4L);
-        state.setCurrentEventType(EventType.MYSTERY_MERCHANT.name());
-        state.setEventStartWorldTime(96L);
-        state.setEventEndWorldTime(108L);
-        state.setEventTargetCropType(CropType.CARROT.name());
-        state.setEventPayload("double_price");
+        BasicEventState merchant = new BasicEventState(EventType.MYSTERY_MERCHANT, 96L, 108L);
+        merchant.setTargetCropType(CropType.CARROT);
+        merchant.setPayload("double_price");
+        state.setActiveEvent(merchant);
         save.save(state);
 
         GameState loaded = new SqliteSaveService(db, null).load();
-        assertEquals("MYSTERY_MERCHANT", loaded.getCurrentEventType());
-        assertEquals("CARROT", loaded.getEventTargetCropType(),
+        assertEquals(EventType.MYSTERY_MERCHANT, loaded.getActiveEvent().getEventType());
+        assertEquals(CropType.CARROT, loaded.getActiveEvent().getTargetCropType(),
                 "神秘商人指定作物应跨退出重进恢复");
-        assertEquals("double_price", loaded.getEventPayload());
+        assertEquals("double_price", loaded.getActiveEvent().getPayload());
     }
 
     @Test
@@ -129,7 +133,7 @@ class ActiveEventPersistenceTest {
         save.save(state);
 
         GameState loaded = new SqliteSaveService(db, null).load();
-        assertNull(loaded.getCurrentEventType(), "无事件时不应写入 active_event 行");
+        assertNull(loaded.getActiveEvent(), "无事件时不应写入 active_event 行");
     }
 
     @Test
@@ -138,20 +142,15 @@ class ActiveEventPersistenceTest {
         SqliteSaveService save = new SqliteSaveService(db, null);
 
         GameState state = new GameState(new Player("农夫", 500), 3L);
-        state.setCurrentEventType(EventType.RAINBOW_DAY.name());
-        state.setEventStartWorldTime(48L);
-        state.setEventEndWorldTime(72L);
+        state.setActiveEvent(new BasicEventState(EventType.RAINBOW_DAY, 48L, 72L));
         save.save(state);
 
         GameState loaded = new SqliteSaveService(db, null).load();
 
         // 用存档字段重建 EventState，验证与 D 模块 EventService 对接可用
-        BasicEventState eventState = new BasicEventState(
-                EventType.valueOf(loaded.getCurrentEventType()),
-                loaded.getEventStartWorldTime(),
-                loaded.getEventEndWorldTime());
-        assertEquals(EventType.RAINBOW_DAY, eventState.getEventType());
-        assertEquals(24L, eventState.getEndWorldTime() - eventState.getStartWorldTime(),
+        EventState restored = loaded.getActiveEvent();
+        assertEquals(EventType.RAINBOW_DAY, restored.getEventType());
+        assertEquals(24L, restored.getEndWorldTime() - restored.getStartWorldTime(),
                 "彩虹日持续 24 游戏小时（验收 §八十二）");
     }
 

@@ -167,7 +167,8 @@ class L0ReadinessGuardTest {
     void activeEventTableHasExactlyFiveSpecifiedColumns() throws Exception {
         DatabaseService db = new DatabaseService(tempDir.resolve("l0-schema.db"));
         try (Connection connection = db.openConnection()) {
-            assertEquals(2, SchemaMigrator.SCHEMA_VERSION, "P2 结构版本应为 2");
+            assertEquals(3, SchemaMigrator.SCHEMA_VERSION,
+                    "P2 结构版本应为 3（P2 日志表）");
             assertTrue(columnExists(connection, "active_event", "event_type"));
             assertTrue(columnExists(connection, "active_event", "start_world_time"));
             assertTrue(columnExists(connection, "active_event", "end_world_time"));
@@ -183,15 +184,17 @@ class L0ReadinessGuardTest {
             ActiveEventDao dao = new ActiveEventDao(connection);
             assertNull(dao.find(), "空表应返回 null（无事件）");
 
-            dao.insert(new ActiveEventDao.ActiveEventRow(
-                    EventType.MYSTERY_MERCHANT.name(), 96L, 108L, CropType.CARROT.name(), "double_price"));
-            ActiveEventDao.ActiveEventRow row = dao.find();
+            BasicEventState merchant = new BasicEventState(EventType.MYSTERY_MERCHANT, 96L, 108L);
+            merchant.setTargetCropType(CropType.CARROT);
+            merchant.setPayload("double_price");
+            dao.upsert(merchant);
+            EventState row = dao.find();
             assertNotNull(row);
-            assertEquals("MYSTERY_MERCHANT", row.eventType());
-            assertEquals(96L, row.startWorldTime());
-            assertEquals(108L, row.endWorldTime());
-            assertEquals("CARROT", row.targetCropType());
-            assertEquals("double_price", row.payload());
+            assertEquals("MYSTERY_MERCHANT", row.getEventType().name());
+            assertEquals(96L, row.getStartWorldTime());
+            assertEquals(108L, row.getEndWorldTime());
+            assertEquals("CARROT", row.getTargetCropType().name());
+            assertEquals("double_price", row.getPayload());
         }
     }
 

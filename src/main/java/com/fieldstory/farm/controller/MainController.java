@@ -113,8 +113,77 @@ public class MainController {
 
     @FXML
     private void initialize() {
-        welcomeText.setText("欢迎来到田野故事农场！");
+        welcomeText.setText("欢迎来到田野故事农场，选一档开始你的故事。");
+        styleMenuButton(newSaveButton, 180, 42);
         buildSlotList();
+    }
+
+    // ==================================================================
+    // 入口界面样式（UI美术设计规范 §13 按钮 / §14 主色表 / §16 组件）
+    // ==================================================================
+
+    /** 按钮 Normal：#A97850（规范 §13「正常」）。 */
+    private static final String BUTTON_NORMAL_STYLE =
+            "-fx-background-color: #A97850;"
+                    + "-fx-background-radius: 10;"
+                    + "-fx-text-fill: #FFF3DD;"
+                    + "-fx-font-size: 16;"
+                    + "-fx-cursor: hand;";
+
+    /** 按钮 Hover / Pressed：#C28B5A（规范 §13「悬停」）。 */
+    private static final String BUTTON_HOVER_STYLE =
+            "-fx-background-color: #C28B5A;"
+                    + "-fx-background-radius: 10;"
+                    + "-fx-text-fill: #FFF3DD;"
+                    + "-fx-font-size: 16;"
+                    + "-fx-cursor: hand;";
+
+    /** 按钮 Disabled：#CCCCCC（规范 §13「禁用」）。 */
+    private static final String BUTTON_DISABLED_STYLE =
+            "-fx-background-color: #CCCCCC;"
+                    + "-fx-background-radius: 10;"
+                    + "-fx-text-fill: #FFF3DD;"
+                    + "-fx-font-size: 16;";
+
+    /** 存档行卡片：比面板略深的米色 + 木色细描边。 */
+    private static final String SLOT_ROW_STYLE =
+            "-fx-background-color: #F7E8C9;"
+                    + "-fx-background-radius: 10;"
+                    + "-fx-border-color: #8B5E3C;"
+                    + "-fx-border-radius: 10;"
+                    + "-fx-border-width: 1;";
+
+    private static final String SLOT_SUMMARY_STYLE =
+            "-fx-text-fill: #493526; -fx-font-size: 14;";
+
+    private static final String EMPTY_HINT_STYLE =
+            "-fx-text-fill: #8B5E3C; -fx-font-size: 14;";
+
+    /**
+     * 统一按钮四态（Normal / Hover / Pressed / Disabled），与 A/B 模块既有实现
+     * （{@code SeedQuickBuyView}、{@code FarmView}）保持一致；禁用态不响应鼠标悬停。
+     */
+    private static void styleMenuButton(Button button, double width, double height) {
+        if (button == null) {
+            return;
+        }
+        button.setPrefSize(width, height);
+        button.setMinSize(width, height);
+        button.setStyle(button.isDisabled() ? BUTTON_DISABLED_STYLE : BUTTON_NORMAL_STYLE);
+        button.setOnMouseEntered(event -> {
+            if (!button.isDisabled()) {
+                button.setStyle(BUTTON_HOVER_STYLE);
+            }
+        });
+        button.setOnMouseExited(event ->
+                button.setStyle(button.isDisabled() ? BUTTON_DISABLED_STYLE : BUTTON_NORMAL_STYLE));
+        button.setOnMousePressed(event -> {
+            if (!button.isDisabled()) {
+                button.setStyle(BUTTON_HOVER_STYLE);
+            }
+        });
+        button.setOnMouseReleased(event ->
+                button.setStyle(button.isDisabled() ? BUTTON_DISABLED_STYLE : BUTTON_NORMAL_STYLE));
     }
 
     // ==================================================================
@@ -129,7 +198,10 @@ public class MainController {
         slotList.getChildren().clear();
         List<SaveSlotInfo> infos = gameManager.allSlotInfos();
         if (infos.isEmpty()) {
-            slotList.getChildren().add(new Label("还没有存档，点击「新建存档」开始游戏。"));
+            Label empty = new Label("还没有存档，点击「新建存档」开启第一段田野故事。");
+            empty.setWrapText(true);
+            empty.setStyle(EMPTY_HINT_STYLE);
+            slotList.getChildren().add(empty);
             return;
         }
         for (SaveSlotInfo info : infos) {
@@ -137,7 +209,7 @@ public class MainController {
         }
     }
 
-    /** 单个存档位行：`存档 N：摘要（存档时间）  [读取] [新游戏]`。 */
+    /** 单个存档位行：`存档 N：摘要（存档时间）  [读取] [新游戏]`（卡片样式）。 */
     private HBox buildSlotRow(SaveSlotInfo info) {
         StringBuilder text = new StringBuilder()
                 .append(info.slot().displayName())
@@ -148,16 +220,21 @@ public class MainController {
         }
         Label summary = new Label(text.toString());
         summary.setMinWidth(260);
+        summary.setStyle(SLOT_SUMMARY_STYLE);
 
         Button loadButton = new Button("读取");
         loadButton.setDisable(!info.occupied());
+        styleMenuButton(loadButton, 88, 34);
         loadButton.setOnAction(event -> onSlotLoad(info.slot()));
 
         Button newGameButton = new Button("新游戏");
+        styleMenuButton(newGameButton, 88, 34);
         newGameButton.setOnAction(event -> onSlotNewGame(info.slot()));
 
         HBox row = new HBox(12, summary, loadButton, newGameButton);
         row.setAlignment(Pos.CENTER_LEFT);
+        row.setPadding(new Insets(8, 12, 8, 12));
+        row.setStyle(SLOT_ROW_STYLE);
         return row;
     }
 
@@ -485,8 +562,10 @@ public class MainController {
     void buildTopBar(StatusView statusView, Node businessToolbar) {
         Button saveButton = new Button("保存进度");
         saveButton.setOnAction(event -> onSaveButtonClick());
+        styleMenuButton(saveButton, 104, 32);
 
         topHintLabel = new Label();
+        topHintLabel.setStyle(SLOT_SUMMARY_STYLE);
         HBox topBar = new HBox(16);
         topBar.getChildren().add(statusView);
         if (businessToolbar != null) {

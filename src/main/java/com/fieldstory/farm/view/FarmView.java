@@ -267,7 +267,7 @@ public class FarmView extends Pane {
     /**
      * 纯函数：悬停提示文案（UI规范 §10）。
      *
-     * <p>六种文案：null=装饰区占位、EMPTY=未开垦、TILLED=已开垦可播种、
+     * <p>六种文案：null=装饰区可放置装饰、EMPTY=未开垦、TILLED=已开垦可播种、
      * PLANTED=作物名+成长x%+今日已浇/未浇、MATURE=已成熟可收获、
      * WITHERED=已枯萎，请铲除（P1，规则 §16.5）。
      *
@@ -277,7 +277,7 @@ public class FarmView extends Pane {
      */
     public static String tooltipTextFor(Soil soil, long currentGameDay) {
         if (soil == null) {
-            return "装饰区（P0 占位）";
+            return "装饰区，可放置装饰";
         }
         switch (soil.getState()) {
             case EMPTY:

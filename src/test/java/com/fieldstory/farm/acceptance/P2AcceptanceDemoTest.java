@@ -133,7 +133,8 @@ class P2AcceptanceDemoTest {
 
         GameState reloadedAgain = new SqliteSaveService(
                 new DatabaseService(tempDir.resolve("demo.db")), null).load();
-        assertEquals(rolled.name(), reloadedAgain.getCurrentEventType(),
+        assertNotNull(reloadedAgain.getActiveEvent(), "离线模拟后的事件应随存档恢复（验收 §九十一）");
+        assertEquals(rolled.name(), reloadedAgain.getActiveEvent().getEventType().name(),
                 "离线模拟后的事件记录应跨退出重进恢复（验收 §九十一）");
     }
 
@@ -170,25 +171,17 @@ class P2AcceptanceDemoTest {
     }
 
     private static void writeEventToState(GameState state, FarmGameModel model) {
-        EventType type = model.getEventState().getEventType();
-        state.setCurrentEventType(type == null ? null : type.name());
-        state.setEventStartWorldTime(model.getEventState().getStartWorldTime());
-        state.setEventEndWorldTime(model.getEventState().getEndWorldTime());
-        CropType target = model.getEventState().getTargetCropType();
-        state.setEventTargetCropType(target == null ? null : target.name());
-        state.setEventPayload(model.getEventState().getPayload());
+        state.setActiveEvent(model.getEventState());
     }
 
     private static void restoreEventFromState(GameState state, FarmGameModel model) {
-        if (state.getCurrentEventType() == null) {
+        if (state.getActiveEvent() == null) {
             return;
         }
-        model.getEventState().setEventType(EventType.valueOf(state.getCurrentEventType()));
-        model.getEventState().setStartWorldTime(state.getEventStartWorldTime());
-        model.getEventState().setEndWorldTime(state.getEventEndWorldTime());
-        if (state.getEventTargetCropType() != null) {
-            model.getEventState().setTargetCropType(CropType.valueOf(state.getEventTargetCropType()));
-        }
-        model.getEventState().setPayload(state.getEventPayload());
+        model.getEventState().setEventType(state.getActiveEvent().getEventType());
+        model.getEventState().setStartWorldTime(state.getActiveEvent().getStartWorldTime());
+        model.getEventState().setEndWorldTime(state.getActiveEvent().getEndWorldTime());
+        model.getEventState().setTargetCropType(state.getActiveEvent().getTargetCropType());
+        model.getEventState().setPayload(state.getActiveEvent().getPayload());
     }
 }
