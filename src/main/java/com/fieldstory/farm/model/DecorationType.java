@@ -6,8 +6,9 @@ import java.util.List;
  * B 模块 P1 的 14 种装饰定义。
  *
  * <p>价格和效果严格来自 V4.0 规则文档。当前规则文档只规定“普通 1x1 / 大型 2x2”，
- * 但没有给出 D01~D14 的逐项尺寸映射，因此本版本把 footprint 独立保留为字段，
- * 暂以 1x1 作为兼容占位。团队冻结逐项尺寸后只改 width/height，不改 Service 接口。
+ * 但没有给出 D01~D14 的逐项尺寸映射，因此本版本把 footprint 独立保留为字段。
+ * 尺寸已按团队冻结决策（D32）落实：D08~D14 为 2x2（占 4 格），D01~D07 保持 1x1；
+ * 冻结只改 width/height，不改 Service 接口。放置校验与渲染已原生按 footprint 处理。
  */
 public enum DecorationType {
 
@@ -30,25 +31,25 @@ public enum DecorationType {
     SMALL_FOUNTAIN("D07", "小喷泉", 250, "small_fountain.png", 1, 1,
             List.of(new DecorationEffect(BuffType.FERTILIZER_OPERATION_MULTIPLIER, 1.20, 1.20, null))),
 
-    WHEAT_WATCHER("D08", "麦田守望者", 200, "wheat_watcher.png", 1, 1,
+    WHEAT_WATCHER("D08", "麦田守望者", 200, "wheat_watcher.png", 2, 2,
             List.of(new DecorationEffect(BuffType.CROP_SPECIFIC_GROWTH, 0.10, 0.10, CropType.WHEAT))),
 
-    CORN_HARVEST("D09", "玉米丰收", 200, "corn_harvest.png", 1, 1,
+    CORN_HARVEST("D09", "玉米丰收", 200, "corn_harvest.png", 2, 2,
             List.of(new DecorationEffect(BuffType.CROP_SPECIFIC_GROWTH, 0.10, 0.10, CropType.CORN))),
 
-    CARROT_FIELD("D10", "胡萝卜地", 200, "carrot_field.png", 1, 1,
+    CARROT_FIELD("D10", "胡萝卜地", 200, "carrot_field.png", 2, 2,
             List.of(new DecorationEffect(BuffType.CROP_SPECIFIC_GROWTH, 0.10, 0.10, CropType.CARROT))),
 
-    GOLDEN_FOUNTAIN("D11", "金色喷泉", 500, "golden_fountain.png", 1, 1,
+    GOLDEN_FOUNTAIN("D11", "金色喷泉", 500, "golden_fountain.png", 2, 2,
             List.of(new DecorationEffect(BuffType.GLOBAL_GROWTH, 0.05, 0.05, null))),
 
-    RAINBOW_FOUNTAIN("D12", "彩虹喷泉", 500, "rainbow_fountain.png", 1, 1,
+    RAINBOW_FOUNTAIN("D12", "彩虹喷泉", 500, "rainbow_fountain.png", 2, 2,
             List.of(new DecorationEffect(BuffType.QUALITY_SCORE, 10, 10, null))),
 
-    GOLDEN_THRONE("D13", "金色王座", 600, "golden_throne.png", 1, 1,
+    GOLDEN_THRONE("D13", "金色王座", 600, "golden_throne.png", 2, 2,
             List.of(new DecorationEffect(BuffType.PRICE_RATE, 0.10, 0.10, null))),
 
-    HARVEST_GODDESS("D14", "丰收女神像", 800, "havest_goddess.png", 1, 1,
+    HARVEST_GODDESS("D14", "丰收女神像", 800, "havest_goddess.png", 2, 2,
             List.of(
                     new DecorationEffect(BuffType.PRICE_RATE, 0.15, 0.15, null),
                     new DecorationEffect(BuffType.QUALITY_SCORE, 5, 5, null)

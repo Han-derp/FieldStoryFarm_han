@@ -4,7 +4,7 @@
 > 工程结构：《脚手架.md》｜ 分工：《模块分工.md》第 4 行（A 模块 P2 = 持续世界引擎）
 > 前置文档：《模块规范/A 模块 P1 接口与类设计文档.md》（决策编号衔接：P1 止于 D22）
 > 决策记录：本文档 §1（P2 新决策自 D23 起）
-> 本卡约束：只产本文档，未改任何 .java ✓
+> 本卡约束：v1.0 只产本文档；v1.1 起随 D31 裁决同步实现代码与单测 ✓
 
 ---
 
@@ -15,9 +15,9 @@
 | 模块名称 | A——土地与作物模块             |
 | 负责角色 | lyj                    |
 | 开发阶段 | P2 / v0.3.0-feature    |
-| 文档版本 | v1.0-draft             |
+| 文档版本 | v1.1                    |
 | 日期   | 2026-09-14             |
-| 状态   | 待团队确认（D27 口径、D30 转交卡） |
+| 状态   | 待团队确认（D27 口径、D30 转交卡；D31 已裁决答复 B） |
 | 包名   | `com.fieldstory.farm`  |
 
 **P2 负责内容**：持续世界引擎——`WorldTimeService`（时间口径与分段切点）、`WorldSimulationService`（分段成长 + 每日结算）、三件套/入参/摘要三个记录类。在线日结与离线模拟共用同一套领域逻辑（验收 §八十九），循环与切段由调用方（B 的 OfflineSimulationService）驱动。
@@ -37,11 +37,12 @@
 | D23 | GrowthRates 记录类替代无限加参（P0/P1 兼容红线） | 成长倍率三件套打包为不可变 `record GrowthRates(weatherRate, decorationRate, eventRate)`，一次组装、多作物复用，避免 growSegment 入参随倍率种数无限膨胀；P0/P1 三率恒 1.0（常量 `GrowthRates.P0 = (1.0, 1.0, 1.0)`，P0/P1 兼容红线）；紧凑构造内建钳制：非法值（<0 或 NaN）一律钳制为 0（异常输入不破坏状态，取 0 只让成长暂停） | `service/GrowthRates.java` 源码；计划书 P0「三率恒 1.0」与成长公式六因子；验收 §二十四/§四十九 |
 | D24 | A 只产 DailySimulationResult，落库归 B | `settleDay` 只返回摘要（§八十九 第⑨步 DailyLog 数据体），不收获、不出售、不动金币、不碰数据库与任何 DAO（验收 §八十六/§八十七）；DailyLog 落库由 E 的 DAO 完成，离线日志聚合归 B（模块分工第 5 行） | 验收 §八十六/§八十七/§八十九；《模块分工.md》第 4/5 行 |
 | D25 | 分段精度：游戏小时逐段，切点=日边界+事件结束+作物成熟 | 段时长用 `double gameHours`（游戏小时，验收 §二十五 支持非整日成长，禁止 `offlineHours ÷ 24` 粗暴处理）；切点三要素 = 游戏日 00:00 边界 + 事件结束时间 + 作物成熟时间（验收 §八十八）；`WorldTimeService.segmentCutPoints` 输出含起止点的升序去重切点列表，事件结束为 null 则忽略 | 验收 §二十五/§八十八；`service/WorldTimeService.java` 源码 |
-| D26 | 在线接入改造走转交卡（E/D 改自己的文件） | A 只交付 `WorldTimeService`/`WorldSimulationService` 与三个记录类；在线跨天接线改造（E 装配层 onDayChanged 替换 P1 简接线）与 D 侧依赖调整以转交卡形式提出，由 E/D 改自己的文件，A 不修改 E/D 任何 .java | 《模块分工.md》第 4/8 行；P1 文档 §8.2 先例（advanceCrops 3 参改造由 D/E 执行） |
+| D26 | > 在线白天的逐 tick 成长由 D 的 FarmController 改调 growSegment(farm, gameHours, rates)| （转交卡 D26：gameHours 由 GAME_DAYS_PER_TICK×24 折算，rates 按当日天气/装饰/事件组装），|与离线循环共用同一引擎与切段逻辑，禁止保留两套成长入口。
 | D27 | 雨天自动补水只增 rainCount 不动 manualWaterCount（口径，**待团队确认**） | 雨天补水效果：rainCount+1、lastHydratedWorldTime 更新、droughtStreak 重置；**不**增加 manualWaterCount、**不**加主动浇水成长 +5% / 品质 +3——雨天补水 ≠ 玩家主动浇水。补水计数的发生步骤口径（⑤⑥ 计数 vs ⑫ 计数）见 D30，本项与 D30 共同待团队确认 | 规则 §二十一；验收 §五十一 |
 | D28 | 72h 封顶后剩余时长丢弃 | `capOfflineRealMinutes = min(raw, 72)`，负数/0 返回 0；超出 72 现实分钟的部分**不模拟、不补偿、不结转到下次离线**，直接丢弃 | 验收 §八十三；规则 §七 |
 | D29 | settleDay 入参带 eventInEffect（当日生效事件，调用方读 EventState） | `DaySettlementInput.eventInEffect` 由调用方在**结算前**从 D 的 `EventState.getEventType()` 读取；§八十九 第⑨步 DailyLog 记录的是**当日生效事件**，非第⑬步次日抽取结果；`DailySimulationResult.event` 与入参同源 | 验收 §八十九 ⑨/⑬；`model/EventState.java` 只读用法；D P2 文档 §二 |
 | D30 | ⑫ 雨天自动补水只写 lastHydratedWorldTime 不计数（计数仅在 ⑤⑥）（转交卡，**待团队确认**） | §八十九 第⑫步（次日新天气的补水）**只写** `lastHydratedWorldTime`，不计数；rainCount/greenRainCount/droughtStreak 一律在次日日结 ⑤⑥（`WitherService.recordDailyWeather`）计数（每雨日 +1 一次，验收 §五十「累计雨日数」口径）。本项为转交卡，待团队确认 | 验收 §八十九 ⑫/§五十；规则 §二十一；P1 文档 §5.2 分支表 |
+| D31 | 逐 Crop DecorationRate：保留双签名 + 内部 resolver（答复 B 最小确认项） | 两个冻结签名不动；新增函数式接口 `DecorationRateResolver`（B 实现）与 4 参 default 重载 `growSegment(Farm, double, GrowthRates, DecorationRateResolver)`：逐株 PLANTED 作物解析 DecorationRate（weatherRate/eventRate 仍取三件套），resolver 为 null 回退统一值，非法值经 GrowthRates 钳制为 0。**正式排除「只消费全局装饰 Buff」**：规则 §五十五 DecorationRate=1+Adjacent+Global+CropSpecific 天然逐 Crop，验收 §六十九 强制 D01/D08/D09/D10 真实效果；排除「逐 Crop 独立成长入口」（破坏概要 §6.3/验收 §八十九 同引擎冻结架构） | 规则 §五十五；验收 §六十九；`service/DecorationRateResolver.java` 与 `BasicWorldSimulationService` 4 参重载源码 |
 
 ---
 
@@ -72,12 +73,18 @@ List<Long> segmentCutPoints(long startWorldHour, long endWorldHour,
  *  新成熟（成长进度跨过 100）的作物列表；不判枯萎、不换天气。 */
 List<Crop> growSegment(Farm farm, double gameHours, GrowthRates rates);
 
+/** 分段成长（4 参重载，决策 D31）：逐株 PLANTED 作物经 DecorationRateResolver
+ *  解析各自 DecorationRate（规则 §五十五：1+Adjacent+Global+CropSpecific+SetBonus）；
+ *  weatherRate/eventRate 仍取 rates；resolver 为 null 回退 3 参行为。 */
+default List<Crop> growSegment(Farm farm, double gameHours, GrowthRates rates,
+        DecorationRateResolver decorationResolver);
+
 /** 每日结算：严格按 §八十九 14 步顺序执行，返回当日摘要；
  *  禁止任何步骤重排或增减，循环由调用方驱动。 */
 DailySimulationResult settleDay(Farm farm, DaySettlementInput input);
 ```
 
-职责：在线每日结算与离线模拟共用同一套领域逻辑（验收 §八十九：禁止两套算法）。纯函数约束（D18/D19 精神延续）：不依赖 GameClock、不读系统时间、不调用 RandomProvider；只产数据（D24）。
+职责：在线每日结算与离线模拟共用同一套领域逻辑（验收 §八十九：禁止两套算法）。纯函数约束（D18/D19 精神延续）：不依赖 GameClock、不读系统时间、不调用 RandomProvider；只产数据（D24）。装饰倍率逐株解析（D31）：装饰是 B 的领域，A 只声明消费入口（`DecorationRateResolver`），不依赖 B 的任何 Service。
 
 ### 3.3 `service/GrowthRates.java`（记录类）
 
@@ -122,6 +129,19 @@ public record DaySettlementInput(long gameDay, long worldTimeAtSettle,
 
 职责：一次日结的全部入参（验收 §八十九）。不可变记录 + 防御性钳制（GrowthRates 先例）：`witherRolls` 按农场遍历顺序消费，每次枯萎掷骰取下一个，取尽视为 1.0（必不枯萎，异常输入不破坏状态）。
 
+### 3.6 `service/DecorationRateResolver.java`（函数式接口）
+
+```java
+@FunctionalInterface
+public interface DecorationRateResolver {
+    /** 返回该地块的完整 DecorationRate（规则 §五十五：1+Adjacent+Global
+     *  +CropSpecific+SetBonus，上限 1.5） */
+    double decorationRate(int row, int column, CropType cropType);
+}
+```
+
+职责：逐 Crop 装饰倍率解析入口（决策 D31）。实现由 B 模块提供（B 的 `BuffService.getGrowthRate(row, column, cropType)` 返回值即 §五十五 完整 DecorationRate，含 D01 邻格 + 全局 + 作物专属）；A 不实现装饰逻辑、不依赖 B 的 Service。解析结果为非法值（<0 或 NaN）时由 GrowthRates 钳制为 0。
+
 ---
 
 ## 4. §3 调用示例
@@ -149,10 +169,14 @@ for (i = 0; i < cutPoints.size() - 1; i++):
     hours = segEnd - segStart                          // D25：游戏小时逐段（double）
     rates = 组装 GrowthRates(
         weatherRate,      // 读 D WeatherState：晴 1.0/雨 1.5/旱 0.5/绿雨 2.0（规则 §十九）
-        decorationRate,   // B 装饰 Buff 倍率（B 领地；未上线恒 1.0）
+        decorationRate,   // 三件套统一值；逐株装饰倍率经 D31 的 4 参重载覆盖（B 的 BuffService）
         eventRate)        // 读 D EventState：彩虹日 2.0，其余 1.0（D P2 文档 §二）
-    matured = worldSimulationService.growSegment(farm, hours, rates)
-                          // 段内只成长、不判枯萎、不换天气（验收 §八十八）
+    matured = worldSimulationService.growSegment(farm, hours, rates,
+            (row, column, cropType) ->
+                    buffService.getGrowthRate(row, column, cropType))
+                          // D31：逐株 DecorationRate = B 的 BuffService 完整装饰倍率
+                          // （规则 §五十五：1+邻格+全局+作物专属，上限 1.5；resolver 为 null
+                          //  则统一用 rates.decorationRate）；段内只成长、不判枯萎、不换天气（验收 §八十八）
 
     if (segEnd % 24 == 0):                             // 到达日末切点（日边界）
         // D29 读取时机：必须在调 settleDay 之前读——
@@ -215,6 +239,8 @@ onDayChanged(day):
 | WeatherRate 四态：晴 1.0 / 雨 1.5 / 旱 0.5 / 绿雨 2.0 | 《FSF游戏规则设计文档.md》§十九「天气」；《FSF_P0-P4功能实现与验收规范.md》§四十九「P1 WeatherRate」 | 规则 §十九；验收 §四十九 |
 | EventRate：彩虹日 2.0，其余 1.0 | 《FSF游戏规则设计文档.md》§五十一（彩虹日 EventRate×2）；《docs/D模块-P2详细设计说明书.md》§二 | 规则 §五十一；D P2 文档 §二 |
 | DecorationRate：P1 装饰上线后加入 × DecorationRate | 《FSF_P0-P4功能实现与验收规范.md》§四十九 | 验收 §四十九 |
+| DecorationRate = 1 + AdjacentBonus + GlobalBonus + CropSpecificBonus + SetBonus（上限 1.5，天然逐 Crop 解析） | 《FSF游戏规则设计文档.md》§五十五「成长装饰倍率」 | 规则 §五十五 |
+| D01 相邻 8 格 +5% 最多 +15%；D05 全局 +3%；D08/D09/D10 小麦/玉米/胡萝卜 +10% 必须真实效果（禁止全局单值口径） | 《FSF_P0-P4功能实现与验收规范.md》§六十九「P1装饰必须实现真实效果」 | 验收 §六十九 |
 | 非整日成长（gameHours/24 折算，禁止 ÷24 粗暴处理） | 《FSF_P0-P4功能实现与验收规范.md》§二十五「P0成长必须支持非整日」、§八十八「P2离线模拟分段」 | 验收 §二十五/§八十八 |
 | 切段三要素：游戏日 00:00 边界 / 事件结束时间 / 作物成熟时间 | 《FSF_P0-P4功能实现与验收规范.md》§八十八 | 验收 §八十八 |
 | 雨天自动补水口径：rainCount+1、lastHydratedTime 更新、streak 重置；不加 manualWaterCount、不加浇水 Buff | 《FSF游戏规则设计文档.md》§二十一「雨天」；《FSF_P0-P4功能实现与验收规范.md》§五十一 | 规则 §二十一；验收 §五十一 |
@@ -241,4 +267,4 @@ onDayChanged(day):
 
 | 版本 | 日期 | 说明 |
 | --- | --- | --- |
-| v1.0-draft | 2026-09-14 | P2 初稿：D23~D30 决策、五个接口/记录类签名（照抄代码原文）、B 离线循环与 E 在线日结调用示例、72/24/14 步/三率溯源说明；D27/D30 标注待团队确认 |
+| v1.1 | 2026-09-14 | D31 裁决落表：新增 `DecorationRateResolver` 与 `growSegment` 4 参重载（接口 + 实现 + 单测 13 用例）；§2/§3/§4 同步逐株装饰倍率口径；v1.0「只产本文档」约束解除 |
