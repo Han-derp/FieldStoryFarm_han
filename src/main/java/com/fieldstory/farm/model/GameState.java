@@ -1,5 +1,7 @@
 package com.fieldstory.farm.model;
 
+import com.fieldstory.farm.model.item.Inventory;
+
 /**
  * 存档聚合（E 存档模块持有）。
  *
@@ -7,6 +9,11 @@ package com.fieldstory.farm.model;
  * Player 经济（金币与种子库存，见 {@link Player}）、
  * 游戏天数（GameClock.getGameDay()）、每块土地完整状态
  * （空闲/已播种/成长中…+生长进度，见 {@link PlotState}）、已解锁内容。
+ *
+ * <p>P2 起（验收规范 §九十一/§九十三/§九十五/§一百零三）在同一聚合上补齐
+ * "关掉再打开也不丢"的其余运行态：世界时钟总分钟与天气、作物生命记忆
+ * {@link CropMemory}、当前随机事件 {@link EventState}、玩家背包 {@link Inventory}
+ * （种子库存仍只在 {@link Player} 中，不重复存）。
  *
  * <p>本类只保存“现在是什么状态”，不含任何游戏计算（统一 Model 原则）。
  * 种子库存的<b>唯一</b>归属是 {@link Player#getSeedInventory()}（B 模块 §6.2），
@@ -32,6 +39,39 @@ public class GameState {
 
     /** 装饰快照（P1 装饰系统接入后由 B 侧写入；P0 为空，对应 SQLite decoration 表） */
     private final java.util.List<DecorationState> decorations = new java.util.ArrayList<>();
+
+    /**
+     * 世界时钟总分钟（P2 新增，对应 {@code world_state.world_total_minutes}）。
+     *
+     * <p>只存 {@link #gameDay} 会把"退出瞬间"抹成当天 06:00：玩家在第 2 天 20:00 退出、
+     * 重开若回到第 2 天 06:00，就等于凭空退回 14 个游戏小时。总分钟让读档精确回到退出时刻。
+     * {@code -1} 为哨兵：旧档没有这个值，此时退回"按天恢复"的 P1 口径。
+     */
+    private long worldTotalMinutes = -1L;
+
+    /** 当前天气（P2 新增，对应 {@code world_state.current_weather}；未记录为 null） */
+    private WeatherType currentWeather;
+
+    /** 当前天气所属游戏日索引（对应 {@code world_state.current_day_index} 的天气口径） */
+    private int weatherDayIndex;
+
+    /**
+     * 作物生命记忆档案快照（P2 新增，对应 SQLite {@code crop_memory} 表，验收规范 §九十三）。
+     * 收获后当前作物会从土地清除，但档案永久保留（§九十五），因此它<b>不</b>跟着 plots 走。
+     */
+    private final java.util.List<CropMemory> memories = new java.util.ArrayList<>();
+
+    /** 当前随机事件快照（P2 新增，对应 SQLite {@code active_event} 表，验收规范 §九十一） */
+    private EventState activeEvent;
+
+    /**
+     * 玩家背包（P2 新增，对应 SQLite {@code player_item} 表；C 模块 {@code Inventory}）。
+     *
+     * <p>只放收获产物 / 肥料等物品；<b>种子库存不在其中</b>，它的唯一归属是
+     * {@link Player#getSeedInventory()}（B 模块 §6.2 禁止第二份库存）。
+     */
+    private final Inventory inventory = new Inventory();
+
 
     public GameState() {
         this(null, 0L);
@@ -81,5 +121,51 @@ public class GameState {
     /** 装饰快照（P1 起持久化到 SQLite decoration 表；P0 为空）。 */
     public java.util.List<DecorationState> getDecorations() {
         return decorations;
+    }
+
+    /** 世界时钟总分钟；{@code -1} 表示旧档未记录（读档时按 {@link #getGameDay()} 粗恢复）。 */
+    public long getWorldTotalMinutes() {
+        return worldTotalMinutes;
+    }
+
+    public void setWorldTotalMinutes(long worldTotalMinutes) {
+        this.worldTotalMinutes = worldTotalMinutes;
+    }
+
+    /** 当前天气；未记录为 null。 */
+    public WeatherType getCurrentWeather() {
+        return currentWeather;
+    }
+
+    public void setCurrentWeather(WeatherType currentWeather) {
+        this.currentWeather = currentWeather;
+    }
+
+    /** 当前天气所属游戏日索引。 */
+    public int getWeatherDayIndex() {
+        return weatherDayIndex;
+    }
+
+    public void setWeatherDayIndex(int weatherDayIndex) {
+        this.weatherDayIndex = weatherDayIndex;
+    }
+
+    /** 作物生命记忆档案快照（可写列表；读档装配时按 cropUuid 覆盖式写入）。 */
+    public java.util.List<CropMemory> getMemories() {
+        return memories;
+    }
+
+    /** 当前随机事件快照；无事件为 null。 */
+    public EventState getActiveEvent() {
+        return activeEvent;
+    }
+
+    public void setActiveEvent(EventState activeEvent) {
+        this.activeEvent = activeEvent;
+    }
+
+    /** 玩家背包（永不为 null；空背包即空实例）。 */
+    public Inventory getInventory() {
+        return inventory;
     }
 }

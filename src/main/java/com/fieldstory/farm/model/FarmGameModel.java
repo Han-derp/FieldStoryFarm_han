@@ -172,4 +172,28 @@ public class FarmGameModel {
     public void restoreWorldTime(int totalMinutes) {
         gameClock.setTotalMinutes(totalMinutes);
     }
+
+    /**
+     * 恢复天气（存档用，验收规范 §七十三 {@code world_state.current_weather}）。
+     *
+     * <p>由 E 模块装配层在读档时调用：把存档中的天气枚举名与天气日索引还原到
+     * {@link WeatherState}。枚举名无法识别（坏数据/旧档）时保持默认 {@code SUNNY}，
+     * 不抛异常（坏数据不阻断读档，D 模块 P1 文档 §4.1）。
+     *
+     * @param weatherName 天气枚举名（{@code SUNNY}/{@code RAIN}/{@code DROUGHT}/{@code GREEN_RAIN}），
+     *                    为 null 或无法识别时保持默认晴天
+     * @param dayIndex    天气所属游戏日索引（从 1 开始）
+     */
+    public void restoreWeather(String weatherName, int dayIndex) {
+        WeatherType type = WeatherType.SUNNY;
+        if (weatherName != null && !weatherName.isBlank()) {
+            try {
+                type = WeatherType.valueOf(weatherName.trim());
+            } catch (IllegalArgumentException unknown) {
+                // 坏数据降级为默认晴天，不阻断读档
+            }
+        }
+        weatherState.setWeatherType(type);
+        weatherState.setDayIndex(dayIndex);
+    }
 }

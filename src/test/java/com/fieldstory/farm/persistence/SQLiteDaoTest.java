@@ -62,7 +62,7 @@ class SQLiteDaoTest {
             assertEquals(SchemaMigrator.SCHEMA_VERSION, SchemaMigrator.readVersion(connection));
             for (String table : new String[]{
                     "player", "player_seed", "unlocked", "farm", "soil", "crop", "decoration",
-                    "world_state", "meta"}) {
+                    "world_state", "meta", "active_event"}) {
                 assertTrue(tableExists(connection, table), "缺少表: " + table);
             }
         }
@@ -317,6 +317,42 @@ class SQLiteDaoTest {
     void saveRejectsNullState() {
         SqliteSaveService service = new SqliteSaveService(database("null.db"));
         assertThrows(IllegalArgumentException.class, () -> service.save(null));
+    }
+
+    /**
+     * 天气存档往返（验收规范 §七十三 {@code world_state.current_weather}）：
+     * 保存后关闭连接重开，天气枚举名应无损还原。
+     */
+    @Test
+    void weatherRoundTripSurvivesReopen() throws Exception {
+        Path dbFile = tempDir.resolve("weather.db");
+        SqliteSaveService service = new SqliteSaveService(new DatabaseService(dbFile));
+
+        GameState state = new GameState(new Player("农夫", 500), 7L);
+        state.setCurrentWeather("GREEN_RAIN");
+        service.save(state);
+
+        SqliteSaveService reopened = new SqliteSaveService(new DatabaseService(dbFile));
+        GameState loaded = reopened.load();
+        assertNotNull(loaded);
+        assertEquals("GREEN_RAIN", loaded.getCurrentWeather(),
+                "current_weather 应随存档还原（验收 §七十三）");
+        assertEquals(7L, loaded.getGameDay(),
+                "current_day_index 应随存档还原（验收 §七十三）");
+    }
+
+    /** 未接入天气（新档）时 {@code current_weather} 为 null，读回仍为 null，不抛异常。 */
+    @Test
+    void weatherNullRoundTripsAsNull() throws Exception {
+        Path dbFile = tempDir.resolve("weather-null.db");
+        SqliteSaveService service = new SqliteSaveService(new DatabaseService(dbFile));
+
+        GameState state = new GameState(new Player("农夫", 500), 1L);
+        service.save(state);
+
+        GameState loaded = new SqliteSaveService(new DatabaseService(dbFile)).load();
+        assertNotNull(loaded);
+        assertNull(loaded.getCurrentWeather(), "未接入天气时 current_weather 应为 null");
     }
 
     @Test

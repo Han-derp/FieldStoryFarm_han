@@ -105,8 +105,7 @@ class MainControllerSaveRoundTripTest {
 
         // 回填钩子应把运行中农场（中心 8×8）与当前游戏天数写入快照
         assertEquals(64, snapshot.getPlots().size(), "存档前回填应捕获中心 8×8 共 64 块农田");
-        assertEquals(0L, snapshot.getGameDay(), "新档尚未结算，存档天数应为 0（gameDay 从 0 起）");
-
+        assertEquals(1L, snapshot.getGameDay(), "新档保存后应为第 1 天（存档天数 = GameClock.getGameDay()，从 1 起）");
         // 用同一数据库文件重开读档（模拟关掉程序再打开）
         GameState reloaded = new SqliteSaveService(new DatabaseService(db)).load();
         assertNotNull(reloaded, "重开后应能读到存档");

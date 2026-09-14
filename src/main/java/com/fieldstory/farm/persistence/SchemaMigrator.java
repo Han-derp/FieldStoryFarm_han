@@ -26,14 +26,30 @@ import java.util.List;
  * player / player_seed / unlocked / farm / soil / crop / decoration / world_state / meta。
  * 其中 player_seed、unlocked、meta 是 E 侧持久化辅助表（种子库存、已解锁内容、迁移标记），
  * 不属于额外游戏系统。
+ *
+ * <p><b>P2 v2 增量（验收规范 §九十一/§九十三/§一百零四）：</b>
+ * <ul>
+ *   <li>{@code crop_memory}：作物生命记忆档案（收获后永久保留，§九十五）；</li>
+ *   <li>{@code active_event}：当前随机事件快照（事件期间退出，回来不能凭空消失，§九十一）；</li>
+ *   <li>{@code player_item}：玩家背包物品（C 模块 {@code Inventory} 的持久化映射）；</li>
+ *   <li>{@code world_state.world_total_minutes}：世界时钟总分钟，用于把"退出瞬间"精确恢复。</li>
+ * </ul>
+ *
+ * <p><b>条件加列语法：</b>迁移语句以 {@value #ADD_COLUMN_PREFIX} 开头时表示"若该列不存在才加"，
+ * 形如 {@code ADD COLUMN world_state.world_total_minutes INTEGER NOT NULL DEFAULT -1}。
+ * SQLite 的 {@code ADD COLUMN} 在列已存在时会直接报错，而这个语法让迁移对
+ * "被回退过版本号的库"、"半成品库" 依旧幂等（见 {@code MigrationTest}）。
  */
 public final class SchemaMigrator {
 
     /** 程序当前支持的数据库结构版本。新增表/字段时必须 +1 并追加迁移步骤。 */
-    public static final int SCHEMA_VERSION = 1;
+    public static final int SCHEMA_VERSION = 2;
+
+    /** 「条件加列」语句前缀：列已存在时跳过，保证迁移幂等。 */
+    static final String ADD_COLUMN_PREFIX = "ADD COLUMN ";
 
     /** 全部迁移步骤，按版本升序。 */
-    private static final List<MigrationStep> STEPS = List.of(stepToV1());
+    private static final List<MigrationStep> STEPS = List.of(stepToV1(), stepToV2());
 
     private SchemaMigrator() {
         // 工具类，禁止实例化
@@ -56,14 +72,59 @@ public final class SchemaMigrator {
         }
         for (MigrationStep step : STEPS) {
             if (step.version() > current) {
-                for (String ddl : step.statements()) {
-                    try (Statement statement = connection.createStatement()) {
-                        statement.executeUpdate(ddl);
-                    }
+                for (String statement : step.statements()) {
+                    executeStatement(connection, statement);
                 }
                 setVersion(connection, step.version());
                 current = step.version();
             }
+        }
+    }
+
+    /** 执行一条迁移语句；带 {@link #ADD_COLUMN_PREFIX} 前缀时为「条件加列」（列已存在则跳过）。 */
+    private static void executeStatement(Connection connection, String statement) throws SQLException {
+        if (!statement.startsWith(ADD_COLUMN_PREFIX)) {
+            runStatement(connection, statement);
+            return;
+        }
+        String rest = statement.substring(ADD_COLUMN_PREFIX.length()).trim();
+        int split = rest.indexOf(' ');
+        if (split < 0) {
+            throw new IllegalStateException("条件加列语句缺少列定义: " + statement);
+        }
+        String target = rest.substring(0, split);
+        String definition = rest.substring(split + 1);
+        int dot = target.indexOf('.');
+        if (dot < 0) {
+            throw new IllegalStateException("条件加列语句缺少 表.列 目标: " + statement);
+        }
+        String table = target.substring(0, dot);
+        String column = target.substring(dot + 1);
+        if (columnExists(connection, table, column)) {
+            return;
+        }
+        // 表名/列名来自本类常量，非外部输入，无注入风险
+        runStatement(connection, "ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
+    }
+
+    /** 执行单条 DDL。 */
+    private static void runStatement(Connection connection, String ddl) throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            statement.executeUpdate(ddl);
+        }
+    }
+
+    /** 判断表中是否已存在某列（{@code PRAGMA table_info}）。 */
+    private static boolean columnExists(Connection connection, String table, String column)
+            throws SQLException {
+        try (Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery("PRAGMA table_info(" + table + ")")) {
+            while (rs.next()) {
+                if (column.equalsIgnoreCase(rs.getString("name"))) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
@@ -123,6 +184,50 @@ public final class SchemaMigrator {
                 "CREATE TABLE IF NOT EXISTS meta ("
                         + " meta_key TEXT PRIMARY KEY,"
                         + " meta_value TEXT NOT NULL)"));
+    }
+
+    /**
+     * v1 → v2：P2 记忆/事件持久化增量（只加表与一列，不动既有列，旧档原地升级不丢数据）。
+     *
+     * <p>{@code crop_memory} 键为 {@code crop_uuid}（生命周期唯一，§九十三），
+     * 与 {@code crop} 表<b>无外键</b>：收获后当前作物行会随土地清空而删除，
+     * 但记忆档案必须永久保留（§九十五），因此不能级联删除。
+     */
+    private static MigrationStep stepToV2() {
+        return new MigrationStep(2, List.of(
+                "CREATE TABLE IF NOT EXISTS crop_memory ("
+                        + " crop_uuid TEXT PRIMARY KEY,"
+                        + " crop_type TEXT,"
+                        + " plant_world_time INTEGER NOT NULL DEFAULT -1,"
+                        + " mature_world_time INTEGER NOT NULL DEFAULT -1,"
+                        + " harvest_world_time INTEGER NOT NULL DEFAULT -1,"
+                        + " manual_water_count INTEGER NOT NULL DEFAULT 0,"
+                        + " rain_count INTEGER NOT NULL DEFAULT 0,"
+                        + " drought_count INTEGER NOT NULL DEFAULT 0,"
+                        + " green_rain_count INTEGER NOT NULL DEFAULT 0,"
+                        + " fertilizer_count INTEGER NOT NULL DEFAULT 0,"
+                        + " last_drought_game_day INTEGER NOT NULL DEFAULT -1,"
+                        + " water_rescue INTEGER NOT NULL DEFAULT 0,"
+                        + " events TEXT,"
+                        + " wither_risk INTEGER NOT NULL DEFAULT 0,"
+                        + " quality TEXT,"
+                        + " legendary INTEGER NOT NULL DEFAULT 0,"
+                        + " final_story TEXT)",
+                // active_event：单行表（id=1），字段沿用验收 §九十一
+                "CREATE TABLE IF NOT EXISTS active_event ("
+                        + " id INTEGER PRIMARY KEY CHECK (id = 1),"
+                        + " event_type TEXT NOT NULL,"
+                        + " start_world_time INTEGER NOT NULL DEFAULT 0,"
+                        + " end_world_time INTEGER NOT NULL DEFAULT 0,"
+                        + " target_crop_type TEXT,"
+                        + " payload TEXT)",
+                // player_item：玩家背包物品（C 模块 Inventory 的快照，item_type 唯一）
+                "CREATE TABLE IF NOT EXISTS player_item ("
+                        + " item_type TEXT PRIMARY KEY,"
+                        + " quantity INTEGER NOT NULL CHECK (quantity >= 0),"
+                        + " unit_price INTEGER NOT NULL DEFAULT 0)",
+                // 条件加列：世界时钟总分钟（退出瞬间精确恢复；-1 = 未记录，按旧档按天恢复）
+                ADD_COLUMN_PREFIX + "world_state.world_total_minutes INTEGER NOT NULL DEFAULT -1"));
     }
 
     /** 单个迁移步骤：执行完 {@code version} 所列 DDL 后，库结构版本应等于 {@code version}。 */

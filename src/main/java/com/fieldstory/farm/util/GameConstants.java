@@ -384,6 +384,16 @@ public final class GameConstants {
      */
     public static final double EVENT_RAINBOW_EVENT_RATE = 2.0;
 
+    /**
+     * 神秘商人售价倍率。
+     *
+     * 规则文档 §四十九：事件期间，被随机指定的那一种作物
+     * 收获出售时最终售价 ×2。由 E 装配层注入
+     * {@code EventPriceRateProvider}（价格计算仍归 C 模块）。
+     */
+    public static final double EVENT_MYSTERY_MERCHANT_PRICE_RATE = 2.0;
+
+
 
     /**
      * 工具类禁止实例化。

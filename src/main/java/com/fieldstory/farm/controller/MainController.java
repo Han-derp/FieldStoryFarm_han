@@ -3,6 +3,8 @@ package com.fieldstory.farm.controller;
 import com.fieldstory.farm.manager.GameManager;
 import com.fieldstory.farm.manager.SceneManager;
 import com.fieldstory.farm.model.Crop;
+import com.fieldstory.farm.model.CropMemory;
+import com.fieldstory.farm.model.EventState;
 import com.fieldstory.farm.model.Farm;
 import com.fieldstory.farm.model.FarmGameModel;
 import com.fieldstory.farm.model.GameState;
@@ -11,13 +13,22 @@ import com.fieldstory.farm.model.Player;
 import com.fieldstory.farm.model.Soil;
 import com.fieldstory.farm.model.WeatherType;
 import com.fieldstory.farm.model.impl.BasicFarm;
+import com.fieldstory.farm.model.item.EventPriceRateProvider;
+import com.fieldstory.farm.model.item.Inventory;
 import com.fieldstory.farm.persistence.FarmStateAdapter;
+import com.fieldstory.farm.persistence.SaveSlot;
+import com.fieldstory.farm.persistence.SaveSlotInfo;
 import com.fieldstory.farm.service.BuffService;
 import com.fieldstory.farm.service.DecorationService;
 import com.fieldstory.farm.service.GrowthService;
+import com.fieldstory.farm.service.HarvestResult;
 import com.fieldstory.farm.service.HarvestService;
+import com.fieldstory.farm.service.HarvestTransactionService;
 import com.fieldstory.farm.service.LandService;
+import com.fieldstory.farm.service.LegendaryService;
+import com.fieldstory.farm.service.MemoryService;
 import com.fieldstory.farm.service.PlantingService;
+import com.fieldstory.farm.service.QualityService;
 import com.fieldstory.farm.service.ShopService;
 import com.fieldstory.farm.service.WateringService;
 import com.fieldstory.farm.service.WitherService;
@@ -26,9 +37,12 @@ import com.fieldstory.farm.service.economy.impl.EconomyServiceImpl;
 import com.fieldstory.farm.service.impl.BasicBuffService;
 import com.fieldstory.farm.service.impl.BasicDecorationService;
 import com.fieldstory.farm.service.impl.BasicGrowthService;
-import com.fieldstory.farm.service.impl.BasicHarvestService;
+import com.fieldstory.farm.service.impl.BasicHarvestTransactionService;
 import com.fieldstory.farm.service.impl.BasicLandService;
+import com.fieldstory.farm.service.impl.BasicLegendaryService;
+import com.fieldstory.farm.service.impl.BasicMemoryService;
 import com.fieldstory.farm.service.impl.BasicPlantingService;
+import com.fieldstory.farm.service.impl.BasicQualityService;
 import com.fieldstory.farm.service.impl.BasicShopService;
 import com.fieldstory.farm.service.impl.BasicWateringService;
 import com.fieldstory.farm.service.impl.BasicWitherService;
@@ -45,18 +59,35 @@ import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
+
+import java.util.List;
 
 /**
  * 主界面控制器（E 场景组装：开始按钮装配 A/B/C/D 各模块，构成可玩最小闭环）。
  *
  * <p>本类只负责装配与调度：
  * A 提供农场/成长/浇水等能力，B 提供经济/商店/装饰/Buff，
- * C 提供收获，D 提供时间/天气，E 负责场景与存档。
+ * C 提供收获（P2 起为完整收获事务，产出品质/传说/生命记忆），
+ * D 提供时间/天气/随机事件，E 负责场景与存档。
+ *
+ * <p><b>P2 存档（三存档位）</b>：主菜单逐行展示三个存档位（空档 / 第 N 天 · 金币 /
+ * 存档时间），玩家选一档「读取」或「新游戏」；进游戏后所有保存都落在该档。
+ * 存档前回填钩子除地块外，还会把<b>世界时钟总分钟、天气、作物生命记忆、当前事件、
+ * 背包物品</b>一起写进 {@link GameState}，使"关掉再打开"能回到退出瞬间而非当天 06:00。
  */
 public class MainController {
 
     @FXML
     private Label welcomeText;
+
+    /** P2：存档位列表容器（每行由 {@link #buildSlotRow} 装配）。 */
+    @FXML
+    private VBox slotList;
+
+    /** P2：主菜单「新建存档」按钮（FXML 注入）。 */
+    @FXML
+    private Button newSaveButton;
 
     /** 全局唯一游戏管理器（单例） */
     private final GameManager gameManager;
@@ -83,28 +114,93 @@ public class MainController {
     @FXML
     private void initialize() {
         welcomeText.setText("欢迎来到田野故事农场！");
+        buildSlotList();
     }
 
-    /** 开始新游戏：无视历史存档，从新档开始。 */
+    // ==================================================================
+    // P2 无限存档位：主菜单
+    // ==================================================================
+
+    /** 装配存档位列表：只列出磁盘上已存在的存档（保存了几个就显示几个）。 */
+    private void buildSlotList() {
+        if (slotList == null) {
+            return;
+        }
+        slotList.getChildren().clear();
+        List<SaveSlotInfo> infos = gameManager.allSlotInfos();
+        if (infos.isEmpty()) {
+            slotList.getChildren().add(new Label("还没有存档，点击「新建存档」开始游戏。"));
+            return;
+        }
+        for (SaveSlotInfo info : infos) {
+            slotList.getChildren().add(buildSlotRow(info));
+        }
+    }
+
+    /** 单个存档位行：`存档 N：摘要（存档时间）  [读取] [新游戏]`。 */
+    private HBox buildSlotRow(SaveSlotInfo info) {
+        StringBuilder text = new StringBuilder()
+                .append(info.slot().displayName())
+                .append("：")
+                .append(info.describe());
+        if (info.savedAt() != null) {
+            text.append("（").append(info.savedAt()).append("）");
+        }
+        Label summary = new Label(text.toString());
+        summary.setMinWidth(260);
+
+        Button loadButton = new Button("读取");
+        loadButton.setDisable(!info.occupied());
+        loadButton.setOnAction(event -> onSlotLoad(info.slot()));
+
+        Button newGameButton = new Button("新游戏");
+        newGameButton.setOnAction(event -> onSlotNewGame(info.slot()));
+
+        HBox row = new HBox(12, summary, loadButton, newGameButton);
+        row.setAlignment(Pos.CENTER_LEFT);
+        return row;
+    }
+
+    /** 新建存档：占用下一个空存档位并开始新游戏（兼容入口，供旧测试调用）。 */
     @FXML
     protected void onNewGameButtonClick() {
-        if (rejectIfRunning()) {
-            return;
-        }
-        assembleGame(true);
+        onNewSaveButtonClick();
     }
 
-    /** 读取存档：从数据库恢复上次退出瞬间的进度；无存档时只提示。 */
+    /** 新建存档：占用下一个空存档位并开始新游戏（主菜单「新建存档」入口）。 */
     @FXML
-    protected void onLoadButtonClick() {
+    protected void onNewSaveButtonClick() {
         if (rejectIfRunning()) {
             return;
         }
-        if (!gameManager.hasSavedGame()) {
-            setStatusMessage("没有找到存档，请先点击“开始新游戏”。");
+        assembleGame(gameManager.nextSlot(), true);
+    }
+
+    /** 读取存档：读取当前存档位（兼容入口，供旧测试与 FXML 调用）。 */
+    @FXML
+    protected void onLoadButtonClick() {
+        onSlotLoad(gameManager.currentSlot());
+    }
+
+    /** 在指定存档位开始新游戏：无视该档历史进度（玩家显式选择该档，不做二次确认）。 */
+    protected void onSlotNewGame(SaveSlot slot) {
+        if (rejectIfRunning()) {
             return;
         }
-        assembleGame(false);
+        assembleGame(slot, true);
+    }
+
+    /** 读取指定存档位；空档只提示不进入。 */
+    protected void onSlotLoad(SaveSlot slot) {
+        if (rejectIfRunning()) {
+            return;
+        }
+        if (!gameManager.hasSavedGame(slot)) {
+            setStatusMessage(slot.displayName() + " 是空档，请先点击该档的「新游戏」。");
+            buildSlotList();
+            return;
+        }
+        assembleGame(slot, false);
     }
 
     /** 已在游戏中则提示并返回 true，避免重复装配。 */
@@ -116,30 +212,50 @@ public class MainController {
         return false;
     }
 
+
     /**
      * 装配游戏闭环。
      *
+     * @param slot    目标存档位（读取或新建都作用于它，之后的保存也落回它）
      * @param newGame true=强制新档；false=读取存档
      */
-    private void assembleGame(boolean newGame) {
-        GameState state = newGame ? gameManager.startNewGame() : gameManager.start();
+    private void assembleGame(SaveSlot slot, boolean newGame) {
+        GameState state = newGame ? gameManager.startNewGame(slot) : gameManager.start(slot);
         Player player = state.getPlayer();
 
         Farm farm = new BasicFarm();
         FarmGameModel model = new FarmGameModel();
         model.setFarm(farm);
 
-        // 恢复 A 的土地/作物快照与 D 的游戏日。
+        // 恢复 A 的土地/作物快照、D 的时钟（精确到分钟）、天气。
         FarmStateAdapter.restore(state, farm);
-        restoreGameDay(state, model);
+        restoreClock(state, model);
+        restoreWeather(state, model);
+
+        // P2：背包 = 存档聚合里的同一个实例（读档时已由 SqliteSaveService 填好），
+        // 收获肥料奖励会直接进它，保存时也直接取它，不存在第二份背包。
+        Inventory inventory = state.getInventory();
+
+        // P2：生命记忆（C）与随机事件（D）——读档时先灌回内存服务/状态，
+        // 之后收获、跨日都在这份"继续的记录"上累加。
+        MemoryService memoryService = new BasicMemoryService();
+        for (CropMemory memory : state.getMemories()) {
+            if (memory != null) {
+                memoryService.save(memory);
+            }
+        }
+        restoreEvent(state, model);
 
         // E 存档前统一回填运行态。
-        // GameState.gameDay 是从 0 起的已结算天数（新档 = 0），而 GameClock.getGameDay() 从第 1 天起，
-        // 两者相差 1；此处必须减 1，与「读取存档」的还原口径（见 restoreGameDay）保持一致，
-        // 否则新档会被写成第 1 天，且玩过 N 天后重开会退回一天。
+        // 存档 gameDay 直接取 GameClock.getGameDay()（第 1 天起）
         gameManager.setBeforeSaveHook(() -> {
             FarmStateAdapter.capture(state, farm);
-            state.setGameDay(model.getGameClock().getGameDay() - 1L);
+            state.setGameDay(model.getGameClock().getGameDay());
+            state.setWorldTotalMinutes(model.getWorldTimeTotalMinutes());
+            state.setCurrentWeather(model.getWeatherState().getWeatherType());
+            state.setWeatherDayIndex(model.getWeatherState().getDayIndex());
+            captureMemories(state, memoryService);
+            state.setActiveEvent(model.getEventState());
         });
 
         // B P0 经济入口保持唯一 Player。
@@ -152,7 +268,8 @@ public class MainController {
         PlantingService planting = new BasicPlantingService(economy, model.getGameClock());
         WateringService watering = new BasicWateringService();
         GrowthService growth = new BasicGrowthService(watering);
-        HarvestService harvest = new BasicHarvestService(economy, land);
+        HarvestService harvest = buildHarvestService(
+                economy, land, model, memoryService, inventory);
         WitherService wither = new BasicWitherService();
 
         // A 的 FarmView 不改；B 装饰通过透明覆盖层扩展 CENTER。
@@ -206,23 +323,103 @@ public class MainController {
     }
 
     /**
-     * 读档还原游戏天数；P1 仍按该日 06:00 恢复。
+     * 读档还原时钟。
      *
-     * <p>{@link GameState#getGameDay()} 为从 0 起的已结算天数（新档 = 0）：第 d 天（d 从 1 起）对应
-     * {@code gameDay = d - 1}，恢复成该日 06:00 的时钟总分钟数 {@code gameDay * MINUTES_PER_DAY + DAY_START}。
-     * 新档 {@code gameDay = 0} 时保持时钟初值（第 1 天 06:00）。
+     * <p>{@link GameState#getGameDay()} 与 {@code GameClock.getGameDay()} 同口径（第 1 天起）：
+     * 第 d 天恢复成该日 06:00 的时钟总分钟数 {@code (d - 1) * MINUTES_PER_DAY + DAY_START}。
+     * {@code gameDay <= 0}（空档/时钟未接入的旧档）时保持时钟初值（第 1 天 06:00）。
      */
-    private static void restoreGameDay(GameState state, FarmGameModel model) {
+    private static void restoreClock(GameState state, FarmGameModel model) {
+        long savedMinutes = state.getWorldTotalMinutes();
+        if (savedMinutes >= 0) {
+            model.restoreWorldTime((int) savedMinutes);
+            return;
+        }
         long savedDay = state.getGameDay();
         if (savedDay > 0) {
-            int totalMinutes = (int) (savedDay * GameConstants.MINUTES_PER_DAY
+            int totalMinutes = (int) ((savedDay - 1) * GameConstants.MINUTES_PER_DAY
                     + GameConstants.DAY_START);
             model.restoreWorldTime(totalMinutes);
         }
     }
 
+    /** 读档还原天气（未记录则保持初值 SUNNY / 第 1 天）。 */
+    private static void restoreWeather(GameState state, FarmGameModel model) {
+        WeatherType weather = state.getCurrentWeather();
+        if (weather != null) {
+            model.getWeatherState().setWeatherType(weather);
+            model.getWeatherState().setDayIndex(
+                    Math.max(1, state.getWeatherDayIndex()));
+        }
+    }
+
+    /** 读档还原当前随机事件（事件期间退出，回来不能凭空消失，验收 §九十一）。 */
+    private static void restoreEvent(GameState state, FarmGameModel model) {
+        EventState saved = state.getActiveEvent();
+        if (saved == null) {
+            return;
+        }
+        EventState live = model.getEventState();
+        live.setEventType(saved.getEventType());
+        live.setStartWorldTime(saved.getStartWorldTime());
+        live.setEndWorldTime(saved.getEndWorldTime());
+        live.setTargetCropType(saved.getTargetCropType());
+        live.setPayload(saved.getPayload());
+    }
+
+    /** 存档前回填生命记忆：内存服务是唯一权威来源，快照整体重建避免残留。 */
+    private static void captureMemories(GameState state, MemoryService memoryService) {
+        state.getMemories().clear();
+        state.getMemories().addAll(memoryService.listAll());
+    }
+
     /**
-     * 跨天：滚动天气 → 记录天气并判定枯萎 → 推进幸存作物成长 → 刷新农场。
+     * 装配 P2 完整收获事务（验收规范 §一百零三），并适配为 A 视图依赖的 {@link HarvestService}。
+     *
+     * <p>为什么需要这层适配：A 的 {@code FarmViewController} 只依赖 P0 的
+     * {@link HarvestService#harvest(com.fieldstory.farm.model.Soil)}（返回结果码用于提示），
+     * 而 P2 事务（品质/传说/记忆/肥料/事件倍率）是 {@link HarvestTransactionService}。
+     * 装配层负责把两者接起来，A 的视图代码一行都不用改（决策 D09：不越层改别人的类）。
+     *
+     * <p>肥料奖励直接进 {@code GameState} 里的同一个背包实例，随存档往返。
+     */
+    private static HarvestService buildHarvestService(EconomyService economy,
+                                                      LandService land,
+                                                      FarmGameModel model,
+                                                      MemoryService memoryService,
+                                                      Inventory inventory) {
+        QualityService qualityService = new BasicQualityService();
+        LegendaryService legendaryService = new BasicLegendaryService();
+        // 神秘商人：事件期间目标作物售价 ×2（规则 §四十九），倍率由 D 的状态决定、C 只读取
+        EventPriceRateProvider priceRateProvider = cropType -> {
+            EventState event = model.getEventState();
+            if (cropType != null
+                    && event != null
+                    && model.getEventService().isMysteryMerchant(event.getEventType())
+                    && cropType == event.getTargetCropType()) {
+                return GameConstants.EVENT_MYSTERY_MERCHANT_PRICE_RATE;
+            }
+            return 1.0;
+        };
+        HarvestTransactionService transaction = new BasicHarvestTransactionService(
+                economy, land, qualityService, legendaryService, memoryService,
+                model.getGameClock(), priceRateProvider);
+
+        return new HarvestService() {
+            @Override
+            public boolean canHarvest(Soil soil) {
+                return transaction.canHarvest(soil);
+            }
+
+            @Override
+            public HarvestResult harvest(Soil soil) {
+                return transaction.harvest(soil, inventory).getResult();
+            }
+        };
+    }
+
+    /**
+     * 跨天：滚动天气与随机事件 → 记录天气并判定枯萎 → 推进幸存作物成长 → 刷新农场。
      */
     private void applyDailyGrowth(Farm farm,
                                   GrowthService growth,
@@ -234,6 +431,9 @@ public class MainController {
 
         if (elapsedDays > 0) {
             WeatherType today = model.getWeatherService().rollDailyWeather(currentDay);
+            // P2：每天抽取当天事件（D 的规则入口；一天最多 1 个，验收 §九十）。
+            // 事件状态随后由存档回填钩子写入 active_event，重开时不会凭空消失。
+            model.getEventService().rollDailyEvent(currentDay);
             double weatherRate = model.getWeatherService().getGrowthRate(today);
             long worldTime = currentDay * 24L + model.getGameClock().getGameHour();
 

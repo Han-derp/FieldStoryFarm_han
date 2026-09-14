@@ -122,7 +122,9 @@ DAO 构造注入 `java.sql.Connection`，**事务边界由 `SqliteSaveService` �
 ## 9. 已知限制 / 后续
 
 - `decoration` 表与 `DecorationDao` 已就绪并有 CRUD，但 P1 装饰系统（B 模块）尚未交付，`GameState.decorations` 暂为空；B 侧接入后由适配层填充。
-- `world_state.current_weather/random_seed/last_real_time` 待 D 模块天气/时钟接入后写入（列已就位）。
+- `world_state.current_weather` **已闭环（L0）**：`SqliteSaveService` 写入/读回 `GameState.currentWeather`，
+  装配层 `MainController` 经 `beforeSaveHook` 捕获运行态天气、读档时经 `FarmGameModel.restoreWeather` 还原。
+  `random_seed/last_real_time` 属 P2 离线模拟，待接入后写入（列已就位）。
 - **`GameState.plots` 与 A 模块 `Farm` 的同步（D3）已落地**：`persistence/FarmStateAdapter`
   负责双向映射（枚举 ↔ 名称、`long` 时间 ↔ 十进制字符串，坏数据降级不丢作物）。
   `MainController` 开局时 `restore`，并通过 `GameManager.setBeforeSaveHook` 在

@@ -7,6 +7,7 @@ import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.GameState;
 import com.fieldstory.farm.model.Player;
 import com.fieldstory.farm.persistence.DatabaseService;
+import com.fieldstory.farm.persistence.SaveSlotManager;
 import com.fieldstory.farm.persistence.SqliteSaveService;
 import com.fieldstory.farm.service.SaveService;
 import com.fieldstory.farm.util.FxmlUtil;
@@ -16,6 +17,7 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
 import org.junit.jupiter.api.BeforeAll;
@@ -33,6 +35,7 @@ import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -106,6 +109,28 @@ class MainControllerMenuTest {
         }
     }
 
+    /** 取 FXML 注入的存档位容器（反射字段，避免依赖 CSS lookup 的 id 语义）。 */
+    private static VBox slotListOf(MainController controller) {
+        try {
+            Field field = MainController.class.getDeclaredField("slotList");
+            field.setAccessible(true);
+            return (VBox) field.get(controller);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("读取 slotList 失败", e);
+        }
+    }
+
+    /** 取 FXML 注入的「新建存档」按钮（反射字段）。 */
+    private static Button newSaveButtonOf(MainController controller) {
+        try {
+            Field field = MainController.class.getDeclaredField("newSaveButton");
+            field.setAccessible(true);
+            return (Button) field.get(controller);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("读取 newSaveButton 失败", e);
+        }
+    }
+
     /** 内存存档：{@code hasSave} / {@code load} 可配置，用于"有档 / 无档"两条分支。 */
     private static final class StubSaveService implements SaveService {
 
@@ -139,29 +164,49 @@ class MainControllerMenuTest {
                 .save(new GameState(new Player("旧档", LEGACY_GOLD), LEGACY_GAME_DAY));
     }
 
-    /** 主菜单两个按钮的文字与 onAction 均已按新入口接线。 */
+    /** 主菜单只列出已存在的存档，每行「存档 N：摘要（存档时间）」+「读取」+「新游戏」，并另有「新建存档」入口。 */
     @Test
-    void menuButtonsAreNewGameAndLoad() throws InterruptedException {
-        List<String[]> buttons = onFxThread(() -> {
-            FXMLLoader loader = loadMenuFxml(new StubSaveService(false, null));
-            VBox root = (VBox) loader.getRoot();
+    void menuListsExistingSavesAndOffersNewSave() throws InterruptedException {
+        Path dataDir = tempDir.resolve("data");
+        new SqliteSaveService(new DatabaseService(dataDir.resolve("farm.db")), null)
+                .save(new GameState(new Player("甲", LEGACY_GOLD), LEGACY_GAME_DAY));
+        new SqliteSaveService(new DatabaseService(dataDir.resolve("save-2.db")), null)
+                .save(new GameState(new Player("乙", 860), 4L));
+
+        List<String[]> rows = onFxThread(() -> {
+            FXMLLoader loader = loadMenuFxml(new GameManager(new SaveSlotManager(
+                    slot -> new SqliteSaveService(
+                            new DatabaseService(dataDir.resolve(slot.databaseFile().getFileName())), null),
+                    () -> SaveSlotManager.discoverSlots(dataDir))));
+            VBox slotList = slotListOf(loader.getController());
+            Button newSave = newSaveButtonOf(loader.getController());
+            assertNotNull(newSave, "主菜单应有「新建存档」按钮");
+            assertEquals("新建存档", newSave.getText());
+            assertNotNull(newSave.getOnAction(), "「新建存档」应已绑定 onAction");
             List<String[]> result = new ArrayList<>();
-            for (Node node : root.getChildren()) {
-                if (node instanceof Button button) {
-                    result.add(new String[] {
-                            button.getText(),
-                            button.getOnAction() == null ? "null" : "bound"
-                    });
-                }
+            for (Node node : slotList.getChildren()) {
+                HBox row = (HBox) node;
+                Label summary = (Label) row.getChildren().get(0);
+                Button load = (Button) row.getChildren().get(1);
+                Button newGame = (Button) row.getChildren().get(2);
+                result.add(new String[] {
+                        summary.getText(),
+                        load.getText(),
+                        newGame.getText(),
+                        load.isDisabled() ? "disabled" : "enabled"
+                });
             }
             return result;
         });
 
-        assertEquals(2, buttons.size(), "主菜单应只有两个按钮");
-        assertEquals("开始新游戏", buttons.get(0)[0]);
-        assertEquals("读取存档", buttons.get(1)[0]);
-        assertEquals("bound", buttons.get(0)[1], "「开始新游戏」应已绑定 onAction");
-        assertEquals("bound", buttons.get(1)[1], "「读取存档」应已绑定 onAction");
+        assertEquals(2, rows.size(), "保存了几个存档就展示几行");
+        assertTrue(rows.get(0)[0].startsWith("存档 1：第 6 天 · 金币 777"), rows.get(0)[0]);
+        assertTrue(rows.get(1)[0].startsWith("存档 2：第 5 天 · 金币 860"), rows.get(1)[0]);
+        for (String[] row : rows) {
+            assertEquals("读取", row[1], "每个存档位都应有「读取」");
+            assertEquals("新游戏", row[2], "每个存档位都应有「新游戏」");
+            assertEquals("enabled", row[3], "有档的「读取」应可用");
+        }
     }
 
     /** 无档时点「读取存档」：只给提示，不进入游戏（不静默开新档）。 */
@@ -179,8 +224,9 @@ class MainControllerMenuTest {
             return welcome.getText();
         });
 
-        assertEquals("没有找到存档，请先点击“开始新游戏”。", hint);
+        assertEquals("存档 1 是空档，请先点击该档的「新游戏」。", hint);
     }
+
 
     /** 有档时点「读取存档」：金币与游戏天数都应还原为存档值。 */
     @Test
@@ -220,7 +266,7 @@ class MainControllerMenuTest {
 
         assertNotEquals(LEGACY_GOLD, state.getPlayer().getGold(), "新游戏不应沿用旧档金币");
         assertEquals(500, state.getPlayer().getGold(), "新游戏初始金币必须保持 500");
-        assertEquals(0L, state.getGameDay(), "新游戏应回到第 0 天（尚未结算）");
+        assertEquals(1L, state.getGameDay(), "新游戏应回到第 1 天");
         for (CropType type : CropType.values()) {
             assertEquals(0, state.getPlayer().getSeedInventory().get(type),
                     "新游戏种子库存应从 0 开始：" + type);
@@ -232,15 +278,14 @@ class MainControllerMenuTest {
         assertTrue(restarted.hasSavedGame(), "开始新游戏后应立即存在可读取存档");
         GameState reloaded = restarted.start();
         assertEquals(500, reloaded.getPlayer().getGold(), "重启读档后金币仍应为 500");
-        assertEquals(0L, reloaded.getGameDay(), "重启读档后仍应为第 0 天");
+        assertEquals(1L, reloaded.getGameDay(), "重启读档后仍应为第 1 天");
     }
 
-    /** 加载主菜单 FXML，并把控制器工厂指向注入内存存档的控制器（不碰真实 data/farm.db）。 */
-    private static FXMLLoader loadMenuFxml(SaveService saveService) {
+    /** 加载主菜单 FXML，并把控制器工厂指向给定 GameManager（不碰真实 data/farm.db）。 */
+    private static FXMLLoader loadMenuFxml(GameManager manager) {
         try {
             FXMLLoader loader = FxmlUtil.load(MainApplication.class, AppConfig.MAIN_VIEW_FXML);
-            loader.setControllerFactory(type ->
-                    new MainController(new GameManager(saveService)));
+            loader.setControllerFactory(type -> new MainController(manager));
             loader.load();
             return loader;
         } catch (java.io.IOException e) {
