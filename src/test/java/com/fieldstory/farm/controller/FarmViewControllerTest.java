@@ -83,9 +83,15 @@ class FarmViewControllerTest {
                 FarmViewController.actionsFor(soil(SoilState.TILLED)));
     }
 
-    @Test
+     @Test
     void actionsForPlantedIsWater() {
         assertEquals(List.of(FarmAction.WATER),
+                FarmViewController.actionsFor(plantedSoil(GrowthStage.SPROUT)));
+    }
+
+    @Test
+    void actionsForPlantedSeedIsEmpty() {
+        assertEquals(List.of(),
                 FarmViewController.actionsFor(plantedSoil(GrowthStage.SEED)));
     }
 
