@@ -13,19 +13,20 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * {@link SetService} 默认实现（E 模块 P3）。
+ * {@link SetService} 默认实现（B 模块 P3）。
  *
- * <p>判定口径取自验收规范 §一百一十五~§一百一十八：某套装完成的充要条件是
- * 「四个成员 {@link DecorationType} 全部拥有（{@code getOwnedCount > 0}）
- * <b>且</b>全部处于放置状态（{@code getPlacedCount > 0}）」。
+ * <p>某套装完成的充要条件是：四个固定成员全部拥有，且全部处于放置状态。
  *
  * <ul>
- *   <li>满足 → 写入 collected（永久）与 active；</li>
- *   <li>不满足 → 只移除 active；collected 永不回退，故拆装任意次套装分都只算一次
- *       （验收规范 §一百二十）。</li>
+ *   <li>满足：写入 collected（永久）与 active；</li>
+ *   <li>不满足：只移除 active；collected 永不回退。</li>
  * </ul>
  *
- * <p>只读 {@link DecorationService}、只写 {@code GameState.setCollection}，不持有额外状态。
+ * <p>因此完成套装以后收起任一成员时，FarmScore 对应的历史收集记录仍保留，
+ * 但套装 Buff 立即停止。
+ *
+ * <p>本实现只读 {@link DecorationService}，只写 {@link SetCollectionState}，
+ * 不执行 SQL，不计算 FarmScore，也不直接修改其他模块业务状态。
  */
 public class BasicSetService implements SetService {
 
@@ -33,13 +34,16 @@ public class BasicSetService implements SetService {
     private final SetCollectionState state;
 
     /**
-     * 绑定装饰服务与会话状态构造。
+     * 绑定装饰服务与会话状态。
      *
-     * @param decorationService 装饰业务入口（不得为 null）
-     * @param gameState         会话状态，其 {@code setCollection} 为读写目标（不得为 null）
+     * @param decorationService 装饰业务入口
+     * @param gameState         当前会话状态，setCollection 为读写目标
      */
     public BasicSetService(DecorationService decorationService, GameState gameState) {
-        this.decorationService = Objects.requireNonNull(decorationService, "decorationService");
+        this.decorationService = Objects.requireNonNull(
+                decorationService,
+                "decorationService"
+        );
         Objects.requireNonNull(gameState, "gameState");
         this.state = gameState.getSetCollection();
     }
@@ -51,12 +55,14 @@ public class BasicSetService implements SetService {
 
     @Override
     public boolean isCollected(DecorationSet set) {
-        return set != null && state.getCollected().contains(set.getId());
+        return set != null
+                && state.getCollected().contains(set.getId());
     }
 
     @Override
     public boolean isActive(DecorationSet set) {
-        return set != null && state.getActive().contains(set.getId());
+        return set != null
+                && state.getActive().contains(set.getId());
     }
 
     @Override
@@ -82,12 +88,18 @@ public class BasicSetService implements SetService {
     @Override
     public List<String> getActiveBuffDescriptions() {
         List<String> buffs = new ArrayList<>();
+
         for (DecorationSet set : DecorationSet.values()) {
             if (isActive(set)) {
-                buffs.add(set.getDisplayName() + "：" + set.getBuffDescription());
+                buffs.add(
+                        set.getDisplayName()
+                                + "："
+                                + set.getBuffDescription()
+                );
             }
         }
-        return buffs;
+
+        return List.copyOf(buffs);
     }
 
     @Override
@@ -95,11 +107,12 @@ public class BasicSetService implements SetService {
         for (DecorationSet set : DecorationSet.values()) {
             boolean allOwned = hasAllMembers(set, true);
             boolean allPlaced = hasAllMembers(set, false);
+
             if (allOwned && allPlaced) {
                 state.getCollected().add(set.getId());
                 state.getActive().add(set.getId());
             } else {
-                // collected 是「曾经完成」的永久记录，绝不在此回退（验收规范 §一百一十八）。
+                // collected 是“曾经完成”的永久记录，不能因拆装而回退。
                 state.getActive().remove(set.getId());
             }
         }
@@ -110,10 +123,12 @@ public class BasicSetService implements SetService {
             int count = owned
                     ? decorationService.getOwnedCount(member)
                     : decorationService.getPlacedCount(member);
+
             if (count <= 0) {
                 return false;
             }
         }
+
         return true;
     }
 }
