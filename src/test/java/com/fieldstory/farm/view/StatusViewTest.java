@@ -1,5 +1,6 @@
 package com.fieldstory.farm.view;
 
+import com.fieldstory.farm.model.EventType;
 import com.fieldstory.farm.model.FarmGameModel;
 import com.fieldstory.farm.model.GameClock;
 import com.fieldstory.farm.model.Player;
@@ -166,6 +167,50 @@ class StatusViewTest {
             return view.getWeatherText();
         });
         assertEquals("晴天", weather);
+    }
+
+    @Test
+    void eventShowsIconAndDisplayName() throws InterruptedException {
+        String event = onFxThread(() -> {
+            FarmGameModel model = new FarmGameModel();
+            model.getEventState().setEventType(EventType.METEOR_SHOWER);
+            StatusView view = new StatusView(model);
+            return view.getEventText();
+        });
+        assertEquals("\uD83C\uDF20 流星夜", event);
+    }
+
+    @Test
+    void eventShowsNoneWhenNoEvent() throws InterruptedException {
+        String event = onFxThread(() -> {
+            FarmGameModel model = new FarmGameModel();
+            StatusView view = new StatusView(model);
+            return view.getEventText();
+        });
+        assertEquals("无事件", event);
+    }
+
+    @Test
+    void eventFallsBackToNoneWhenTypeNull() throws InterruptedException {
+        String event = onFxThread(() -> {
+            FarmGameModel model = new FarmGameModel();
+            model.getEventState().setEventType(null);
+            StatusView view = new StatusView(model);
+            return view.getEventText();
+        });
+        assertEquals("无事件", event);
+    }
+
+    @Test
+    void eventReflectsStateChangeOnUpdate() throws InterruptedException {
+        String event = onFxThread(() -> {
+            FarmGameModel model = new FarmGameModel();
+            StatusView view = new StatusView(model);
+            model.getEventState().setEventType(EventType.RAINBOW_DAY);
+            view.update();
+            return view.getEventText();
+        });
+        assertEquals("\uD83C\uDF08 彩虹日", event);
     }
 
     /** 可抛异常的取值函数。 */
