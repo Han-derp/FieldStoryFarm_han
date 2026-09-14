@@ -266,7 +266,7 @@ class MainControllerMenuTest {
 
         assertNotEquals(LEGACY_GOLD, state.getPlayer().getGold(), "新游戏不应沿用旧档金币");
         assertEquals(500, state.getPlayer().getGold(), "新游戏初始金币必须保持 500");
-        assertEquals(0L, state.getGameDay(), "新游戏应回到第 0 天（尚未结算）");
+        assertEquals(1L, state.getGameDay(), "新游戏应回到第 1 天");
         for (CropType type : CropType.values()) {
             assertEquals(0, state.getPlayer().getSeedInventory().get(type),
                     "新游戏种子库存应从 0 开始：" + type);
@@ -278,7 +278,7 @@ class MainControllerMenuTest {
         assertTrue(restarted.hasSavedGame(), "开始新游戏后应立即存在可读取存档");
         GameState reloaded = restarted.start();
         assertEquals(500, reloaded.getPlayer().getGold(), "重启读档后金币仍应为 500");
-        assertEquals(0L, reloaded.getGameDay(), "重启读档后仍应为第 0 天");
+        assertEquals(1L, reloaded.getGameDay(), "重启读档后仍应为第 1 天");
     }
 
     /** 加载主菜单 FXML，并把控制器工厂指向给定 GameManager（不碰真实 data/farm.db）。 */
