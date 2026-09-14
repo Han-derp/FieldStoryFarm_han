@@ -269,6 +269,43 @@ public class FarmView extends Pane {
     }
 
     /**
+     * 纯函数：成长阶段 → 图集帧索引（A 模块 P1 作物贴图接入；决策文档 D2/D3；
+     * UI规范 §7 Tile组合策略）。
+     *
+     * <p>映射：SEED→0、SPROUT→2、GROWING→4、MATURE→末帧（totalFrames-1）、
+     * WITHERED→-1（不显示贴图哨兵）。帧数不足时钳制到 totalFrames-1；
+     * stage 为 null 或 totalFrames≤0 返回 -1（坏数据兜底，
+     * AImageAssets 遇 -1 不创建贴图视图）。
+     *
+     * @param stage      成长阶段（可为 null）
+     * @param frameCount 图集总帧数
+     * @return 帧索引；-1 表示不显示贴图
+     */
+    public static int cropFrameIndexFor(GrowthStage stage, int frameCount) {
+        if (stage == null || frameCount <= 0 || stage == GrowthStage.WITHERED) {
+            return -1;
+        }
+        int frame;
+        switch (stage) {
+            case SEED:
+                frame = 0;
+                break;
+            case SPROUT:
+                frame = 2;
+                break;
+            case GROWING:
+                frame = 4;
+                break;
+            case MATURE:
+                frame = frameCount - 1;
+                break;
+            default:
+                return -1;
+        }
+        return Math.min(frame, frameCount - 1);
+    }
+
+    /**
      * 纯函数：悬停提示文案（UI规范 §10）。
      *
      * <p>六种文案：null=装饰区可放置装饰、EMPTY=未开垦、TILLED=已开垦可播种、
@@ -472,10 +509,14 @@ public class FarmView extends Pane {
         selectionRect.setY(soil.getRow() * TILE_SIZE);
         selectionRect.setVisible(true);
         // 点击会隐藏 Tooltip（JavaFX 默认）；选中后立刻重开，
-        // 鼠标不离开格子也能持续看到状态
-        tooltips[soil.getRow()][soil.getColumn()]
-                .show(tiles[soil.getRow()][soil.getColumn()],
-                        TILE_SIZE / 2.0, TILE_SIZE / 2.0);
+        // 鼠标不离开格子也能持续看到状态。
+        // 守卫：无窗口环境（单元测试）跳过 .show()，避免
+        // "The owner node needs to be associated with a window"
+        Rectangle tile = tiles[soil.getRow()][soil.getColumn()];
+        if (tile.getScene() != null && tile.getScene().getWindow() != null) {
+            tooltips[soil.getRow()][soil.getColumn()]
+                    .show(tile, TILE_SIZE / 2.0, TILE_SIZE / 2.0);
+        }
     }
 
     /** 注册 FARM_PLOT 格点击回调（装饰区点击传入 null）。 */
@@ -526,7 +567,12 @@ public class FarmView extends Pane {
         int row = soil.getRow();
         int column = soil.getColumn();
         tooltips[row][column].setText(message);
-        tooltips[row][column].show(tiles[row][column], TILE_SIZE / 2.0, TILE_SIZE / 2.0);
+        // 守卫：无窗口环境（单元测试）跳过 .show()，避免
+        // "The owner node needs to be associated with a window"
+        Rectangle tile = tiles[row][column];
+        if (tile.getScene() != null && tile.getScene().getWindow() != null) {
+            tooltips[row][column].show(tile, TILE_SIZE / 2.0, TILE_SIZE / 2.0);
+        }
     }
 
     // ==================== 按钮（UI规范 §13） ====================
