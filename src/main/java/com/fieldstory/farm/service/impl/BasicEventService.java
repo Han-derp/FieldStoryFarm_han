@@ -14,7 +14,6 @@ import static com.fieldstory.farm.util.GameConstants.EVENT_PROB_ANIMAL_VISIT;
 import static com.fieldstory.farm.util.GameConstants.EVENT_PROB_METEOR_SHOWER;
 import static com.fieldstory.farm.util.GameConstants.EVENT_PROB_MYSTERY_MERCHANT;
 import static com.fieldstory.farm.util.GameConstants.EVENT_PROB_NONE;
-import static com.fieldstory.farm.util.GameConstants.EVENT_PROB_RAINBOW_DAY;
 
 /**
  * {@link EventService} 基础实现（D 模块 P2：世界环境 · 随机事件系统）。
@@ -28,11 +27,10 @@ import static com.fieldstory.farm.util.GameConstants.EVENT_PROB_RAINBOW_DAY;
  * （合计 100）。一次随机抽取决定结果，禁止四个事件分别独立判断（验收规范 §九十）。
  * 随机必须经 {@code RandomProvider}，禁止 {@code new Random()}（规则文档 §九十）。
  *
- * <p><b>世界时间口径（决策 D14 + P2 离线 Event 方案 A）：</b>事件抽取由
- * {@link #rollDailyEvent(int)} 的 {@code dayIndex} 明确决定新事件起点：
- * {@code startWorldTime = dayIndex * 24}。因此离线日结不依赖尚未推进的 GameClock；
- * B 可在完整离线循环结束后一次性推进时钟。构造器中的 GameClock 继续保留以兼容既有装配，
- * 但不再作为事件 start/end 的时间事实源。
+ * <p><b>事件起点口径（D 方案 A）：</b>{@link #rollDailyEvent(int)} 只在每日 00:00
+ * 世界结算边界创建“当天事件”，因此事件起始世界时间必须由传入的 {@code dayIndex}
+ * 计算为 {@code dayIndex * 24L}。不能读取一个尚未同步到该日边界的旧 {@link GameClock}
+ * 来决定新事件起点，否则在线跨日/离线逐日模拟都会产生时间漂移。
  *
  * <p><b>阶段边界：</b>本实现只提供事件规则与状态，<b>不执行</b>离线模拟
  * （离线模拟由 B 模块复用本服务规则执行，验收规范 §八十九）。
@@ -42,7 +40,10 @@ public class BasicEventService implements EventService {
     /** 事件状态（持有，1 对 1）。 */
     private final EventState eventState;
 
-    /** 游戏时钟：保留既有构造器/装配兼容；事件起止时间不再从它读取。 */
+    /**
+     * 游戏时钟依赖。保留既有构造/装配契约；每日事件的开始时间不从这里读取，
+     * 而由 rollDailyEvent(dayIndex) 的目标游戏日 00:00 决定。
+     */
     private final GameClock gameClock;
 
     /**
@@ -60,35 +61,52 @@ public class BasicEventService implements EventService {
     public EventType rollDailyEvent(int dayIndex) {
         int roll = RandomProvider.nextInt(100);
         EventType type;
-        if (roll < EVENT_PROB_NONE) {                                   // [0, 74) → 74%
+
+        if (roll < EVENT_PROB_NONE) {
             type = EventType.NONE;
-        } else if (roll < EVENT_PROB_NONE + EVENT_PROB_METEOR_SHOWER) { // [74, 79) → 5%
+        } else if (roll < EVENT_PROB_NONE + EVENT_PROB_METEOR_SHOWER) {
             type = EventType.METEOR_SHOWER;
-        } else if (roll < EVENT_PROB_NONE + EVENT_PROB_METEOR_SHOWER
-                + EVENT_PROB_MYSTERY_MERCHANT) {                        // [79, 87) → 8%
+        } else if (roll < EVENT_PROB_NONE
+                + EVENT_PROB_METEOR_SHOWER
+                + EVENT_PROB_MYSTERY_MERCHANT) {
             type = EventType.MYSTERY_MERCHANT;
-        } else if (roll < EVENT_PROB_NONE + EVENT_PROB_METEOR_SHOWER
-                + EVENT_PROB_MYSTERY_MERCHANT + EVENT_PROB_ANIMAL_VISIT) { // [87, 97) → 10%
+        } else if (roll < EVENT_PROB_NONE
+                + EVENT_PROB_METEOR_SHOWER
+                + EVENT_PROB_MYSTERY_MERCHANT
+                + EVENT_PROB_ANIMAL_VISIT) {
             type = EventType.ANIMAL_VISIT;
-        } else {                                                        // [97, 100) → 3%
+        } else {
             type = EventType.RAINBOW_DAY;
         }
 
-        // P2 离线 Event 方案 A：新事件从 dayIndex 对应游戏日 00:00 开始。
-        // 不读取 GameClock，避免离线循环结束前时钟尚未推进导致 start/end 使用旧时间。
-        long now = (long) dayIndex * 24L;
+        /*
+         * D 方案 A：
+         * 当天事件在 00:00 创建。
+         *
+         * dayIndex 是本次抽取所对应的目标游戏日，
+         * 所以事件开始时间必须使用该日 00:00。
+         *
+         * 不能读取一个可能仍然停留在旧时刻的 GameClock。
+         */
+        long now = dayStartWorldTime(dayIndex);
+
         eventState.setEventType(type);
         eventState.setTargetCropType(null);
         eventState.setPayload(null);
 
         if (type == EventType.NONE) {
+
             eventState.setStartWorldTime(0L);
             eventState.setEndWorldTime(0L);
+
         } else if (type.isInstant()) {
-            // 即时事件（小动物来访）：不设持续，起止均为当前时刻（规则文档 §五十）
+
+            // 小动物来访属于即时事件，无持续时间。
             eventState.setStartWorldTime(now);
             eventState.setEndWorldTime(now);
+
         } else {
+
             eventState.setStartWorldTime(now);
             eventState.setEndWorldTime(now + durationOf(type));
         }
@@ -96,15 +114,20 @@ public class BasicEventService implements EventService {
         if (type == EventType.MYSTERY_MERCHANT) {
             eventState.setTargetCropType(randomTargetCrop());
         }
+
         return type;
     }
 
     @Override
     public boolean isEventActive(long currentWorldTime) {
         EventType type = eventState.getEventType();
-        if (type == null || type == EventType.NONE || type.isInstant()) {
+
+        if (type == null
+                || type == EventType.NONE
+                || type.isInstant()) {
             return false;
         }
+
         return currentWorldTime >= eventState.getStartWorldTime()
                 && currentWorldTime < eventState.getEndWorldTime();
     }
@@ -112,10 +135,13 @@ public class BasicEventService implements EventService {
     @Override
     public void expireIfNeeded(long currentWorldTime) {
         EventType type = eventState.getEventType();
+
         if (type == null || type == EventType.NONE) {
             return;
         }
+
         if (currentWorldTime >= eventState.getEndWorldTime()) {
+
             eventState.setEventType(EventType.NONE);
             eventState.setStartWorldTime(0L);
             eventState.setEndWorldTime(0L);
@@ -126,12 +152,16 @@ public class BasicEventService implements EventService {
 
     @Override
     public String getDisplayName(EventType type) {
-        return type == null ? EventType.NONE.getDisplayName() : type.getDisplayName();
+        return type == null
+                ? EventType.NONE.getDisplayName()
+                : type.getDisplayName();
     }
 
     @Override
     public String getIcon(EventType type) {
-        return type == null ? EventType.NONE.getIcon() : type.getIcon();
+        return type == null
+                ? EventType.NONE.getIcon()
+                : type.getIcon();
     }
 
     @Override
@@ -150,32 +180,66 @@ public class BasicEventService implements EventService {
     }
 
     /**
-     * 计算事件持续时间（游戏小时，规则文档 §四十八~§五十一）。
+     * 计算事件持续时间。
      *
      * @param type 事件类型
-     * @return 持续时间（游戏小时）
+     * @return 持续时间，单位：游戏小时
      */
     private int durationOf(EventType type) {
+
         switch (type) {
+
             case METEOR_SHOWER:
                 return EVENT_DURATION_METEOR_SHOWER;
+
             case MYSTERY_MERCHANT:
                 return EVENT_DURATION_MYSTERY_MERCHANT;
+
             case RAINBOW_DAY:
                 return EVENT_DURATION_RAINBOW_DAY;
+
             default:
                 return 0;
         }
     }
 
     /**
-     * 随机指定神秘商人目标作物（规则文档 §四十九：WHEAT/CORN/CARROT）。
+     * 随机指定神秘商人目标作物。
      *
-     * @return 目标作物类型
+     * @return WHEAT / CORN / CARROT 之一
      */
     private CropType randomTargetCrop() {
-        CropType[] candidates = {CropType.WHEAT, CropType.CORN, CropType.CARROT};
-        return candidates[RandomProvider.nextInt(candidates.length)];
+
+        CropType[] candidates = {
+                CropType.WHEAT,
+                CropType.CORN,
+                CropType.CARROT
+        };
+
+        return candidates[
+                RandomProvider.nextInt(candidates.length)
+                ];
     }
 
+    /**
+     * 计算指定游戏日 00:00 对应的世界时间。
+     *
+     * <p>当前项目的世界时间适配口径：
+     *
+     * <pre>
+     * worldTime = gameDay * 24 + gameHour
+     * </pre>
+     *
+     * 每日 Event 在 00:00 抽取，因此：
+     *
+     * <pre>
+     * eventStartWorldTime = dayIndex * 24
+     * </pre>
+     *
+     * @param dayIndex 游戏日，从 1 开始
+     * @return 当天 00:00 世界时间
+     */
+    private long dayStartWorldTime(int dayIndex) {
+        return (long) dayIndex * 24L;
+    }
 }

@@ -3,6 +3,7 @@ package com.fieldstory.farm.persistence.dao;
 import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.EventState;
 import com.fieldstory.farm.model.EventType;
+import com.fieldstory.farm.model.impl.BasicEventState;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -13,12 +14,19 @@ import java.util.Objects;
 /**
  * 当前随机事件数据访问对象（E 模块 P2 DAO；验收规范 §九十一）。
  *
- * <p>正式业务 API 以 {@link EventState} 为边界；同时保留早期验收代码使用的
- * {@link ActiveEventRow} / insert / update 兼容入口。兼容层只做数据映射，
- * 不引入第二份事件状态，也不改变 active_event 单行表语义。
+ * <p>负责 {@code active_event} 表（单行表，id = 1）。存在这张表的原因很直接：
+ * <b>游戏在事件持续期间退出，回来时事件不能凭空消失</b>——必须把事件类型、
+ * 起止世界时间、神秘商人的目标作物与 payload 一起存下来。
+ *
+ * <p>字段与 {@link EventState} 一一对应：{@code event_type}（枚举 {@code name()}）、
+ * {@code start_world_time}、{@code end_world_time}、{@code target_crop_type}、{@code payload}。
+ * 枚举读回时无法识别则置 null/默认 {@link EventType#NONE}，坏数据不让读档崩溃。
+ *
+ * <p>D 模块只负责事件规则，落库由本 DAO 负责（验收规范 §七十五：Service 不直接写 SQL）。
  */
 public class ActiveEventDao {
 
+    /** 单行表固定主键。 */
     private static final int SINGLETON_ID = 1;
 
     private final Connection connection;
@@ -27,7 +35,7 @@ public class ActiveEventDao {
         this.connection = Objects.requireNonNull(connection, "connection 不能为空");
     }
 
-    /** 正式 P2 入口：写入/覆盖当前事件快照。 */
+    /** 写入/覆盖当前事件快照。 */
     public void upsert(EventState state) throws SQLException {
         Objects.requireNonNull(state, "state 不能为空");
         try (PreparedStatement ps = connection.prepareStatement(
@@ -54,12 +62,9 @@ public class ActiveEventDao {
     /**
      * 读取当前事件快照。
      *
-     * <p>返回类型使用兼容行对象，但该对象同时实现 {@link EventState}，因此 E 的正式
-     * {@code GameState.setActiveEvent(...)} 调用与旧测试的 row accessor 可同时工作。
-     *
-     * @return 事件快照；库中无记录返回 null
+     * @return 事件状态；库中无记录返回 {@code null}
      */
-    public ActiveEventRow find() throws SQLException {
+    public EventState find() throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement(
                 "SELECT event_type, start_world_time, end_world_time, target_crop_type, payload"
                         + " FROM active_event WHERE id = ?")) {
@@ -68,24 +73,15 @@ public class ActiveEventDao {
                 if (!rs.next()) {
                     return null;
                 }
-                return new ActiveEventRow(
-                        rs.getString("event_type"),
+                BasicEventState state = new BasicEventState(
+                        parseEnum(EventType.class, rs.getString("event_type"), EventType.NONE),
                         rs.getLong("start_world_time"),
-                        rs.getLong("end_world_time"),
-                        rs.getString("target_crop_type"),
-                        rs.getString("payload"));
+                        rs.getLong("end_world_time"));
+                state.setTargetCropType(parseEnum(CropType.class, rs.getString("target_crop_type")));
+                state.setPayload(rs.getString("payload"));
+                return state;
             }
         }
-    }
-
-    /** 兼容早期 DAO 测试：insert 与正式 upsert 等价。 */
-    public void insert(ActiveEventRow row) throws SQLException {
-        upsert(row);
-    }
-
-    /** 兼容早期 DAO 测试：单行表 update 与正式 upsert 等价。 */
-    public void update(ActiveEventRow row) throws SQLException {
-        upsert(row);
     }
 
     /** 删除事件快照（无事件 / 新档）。 */
@@ -95,100 +91,7 @@ public class ActiveEventDao {
         }
     }
 
-    /**
-     * P1/P2 早期验收使用的数据行兼容类型。
-     *
-     * <p>它实现 {@link EventState}，因此不是第二份领域模型，而只是 SQL 行与领域接口之间
-     * 的可变适配器。{@code eventType()/targetCropType()} 保留字符串 accessor，
-     * {@code getEventType()/getTargetCropType()} 提供正式枚举接口。
-     */
-    public static final class ActiveEventRow implements EventState {
-        private String eventType;
-        private long startWorldTime;
-        private long endWorldTime;
-        private String targetCropType;
-        private String payload;
-
-        public ActiveEventRow(String eventType, long startWorldTime, long endWorldTime,
-                              String targetCropType, String payload) {
-            this.eventType = eventType;
-            this.startWorldTime = startWorldTime;
-            this.endWorldTime = endWorldTime;
-            this.targetCropType = targetCropType;
-            this.payload = payload;
-        }
-
-        public String eventType() {
-            return eventType;
-        }
-
-        public long startWorldTime() {
-            return startWorldTime;
-        }
-
-        public long endWorldTime() {
-            return endWorldTime;
-        }
-
-        public String targetCropType() {
-            return targetCropType;
-        }
-
-        public String payload() {
-            return payload;
-        }
-
-        @Override
-        public EventType getEventType() {
-            return parseEnum(EventType.class, eventType, EventType.NONE);
-        }
-
-        @Override
-        public void setEventType(EventType eventType) {
-            this.eventType = eventType == null ? null : eventType.name();
-        }
-
-        @Override
-        public long getStartWorldTime() {
-            return startWorldTime;
-        }
-
-        @Override
-        public void setStartWorldTime(long startWorldTime) {
-            this.startWorldTime = startWorldTime;
-        }
-
-        @Override
-        public long getEndWorldTime() {
-            return endWorldTime;
-        }
-
-        @Override
-        public void setEndWorldTime(long endWorldTime) {
-            this.endWorldTime = endWorldTime;
-        }
-
-        @Override
-        public CropType getTargetCropType() {
-            return parseEnum(CropType.class, targetCropType, null);
-        }
-
-        @Override
-        public void setTargetCropType(CropType targetCropType) {
-            this.targetCropType = targetCropType == null ? null : targetCropType.name();
-        }
-
-        @Override
-        public String getPayload() {
-            return payload;
-        }
-
-        @Override
-        public void setPayload(String payload) {
-            this.payload = payload;
-        }
-    }
-
+    /** 宽容解析枚举名；null/空/非法时返回 {@code fallback}。 */
     private static <E extends Enum<E>> E parseEnum(Class<E> type, String name, E fallback) {
         if (name == null || name.isBlank()) {
             return fallback;
@@ -198,5 +101,10 @@ public class ActiveEventDao {
         } catch (IllegalArgumentException unknown) {
             return fallback;
         }
+    }
+
+    /** 宽容解析枚举名；非法返回 null。 */
+    private static <E extends Enum<E>> E parseEnum(Class<E> type, String name) {
+        return parseEnum(type, name, null);
     }
 }

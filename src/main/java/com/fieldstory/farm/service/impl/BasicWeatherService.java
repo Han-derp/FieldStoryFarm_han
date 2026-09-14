@@ -6,7 +6,6 @@ import com.fieldstory.farm.service.WeatherService;
 import com.fieldstory.farm.util.RandomProvider;
 
 import static com.fieldstory.farm.util.GameConstants.WEATHER_PROB_DROUGHT;
-import static com.fieldstory.farm.util.GameConstants.WEATHER_PROB_GREEN_RAIN;
 import static com.fieldstory.farm.util.GameConstants.WEATHER_PROB_RAIN;
 import static com.fieldstory.farm.util.GameConstants.WEATHER_PROB_SUNNY;
 import static com.fieldstory.farm.util.GameConstants.WEATHER_QUALITY_DROUGHT;

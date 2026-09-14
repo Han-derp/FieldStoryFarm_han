@@ -1,7 +1,6 @@
 package com.fieldstory.farm.model;
 
 import com.fieldstory.farm.model.item.Inventory;
-import com.fieldstory.farm.model.impl.BasicEventState;
 
 /**
  * 存档聚合（E 存档模块持有）。
@@ -155,23 +154,6 @@ public class GameState {
         this.currentWeather = currentWeather;
     }
 
-    /**
-     * 兼容早期 P1/P2 装配代码的天气枚举名写入。新代码优先使用
-     * {@link #setCurrentWeather(WeatherType)}。非法枚举名按 null 处理，
-     * 避免旧存档/旧测试因字符串坏值阻断启动。
-     */
-    public void setCurrentWeather(String weatherName) {
-        if (weatherName == null || weatherName.isBlank()) {
-            this.currentWeather = null;
-            return;
-        }
-        try {
-            this.currentWeather = WeatherType.valueOf(weatherName.trim());
-        } catch (IllegalArgumentException unknown) {
-            this.currentWeather = null;
-        }
-    }
-
     /** 当前天气所属游戏日索引。 */
     public int getWeatherDayIndex() {
         return weatherDayIndex;
@@ -193,101 +175,6 @@ public class GameState {
 
     public void setActiveEvent(EventState activeEvent) {
         this.activeEvent = activeEvent;
-    }
-
-    // ------------------------------------------------------------------
-    // P2 兼容桥：早期验收代码使用扁平事件字段；正式状态仍唯一存于 activeEvent。
-    // ------------------------------------------------------------------
-
-    /** @deprecated 新代码使用 {@link #getActiveEvent()}。 */
-    @Deprecated
-    public String getCurrentEventType() {
-        return activeEvent == null || activeEvent.getEventType() == null
-                ? null : activeEvent.getEventType().name();
-    }
-
-    /** @deprecated 新代码构造 EventState 后调用 {@link #setActiveEvent(EventState)}。 */
-    @Deprecated
-    public void setCurrentEventType(String eventType) {
-        if (eventType == null || eventType.isBlank()) {
-            activeEvent = null;
-            return;
-        }
-        EventState state = ensureActiveEvent();
-        try {
-            state.setEventType(EventType.valueOf(eventType.trim()));
-        } catch (IllegalArgumentException unknown) {
-            state.setEventType(EventType.NONE);
-        }
-    }
-
-    /** @deprecated 新代码使用 {@code getActiveEvent().getStartWorldTime()}。 */
-    @Deprecated
-    public long getEventStartWorldTime() {
-        return activeEvent == null ? 0L : activeEvent.getStartWorldTime();
-    }
-
-    /** @deprecated 新代码使用 EventState。 */
-    @Deprecated
-    public void setEventStartWorldTime(long value) {
-        ensureActiveEvent().setStartWorldTime(value);
-    }
-
-    /** @deprecated 新代码使用 {@code getActiveEvent().getEndWorldTime()}。 */
-    @Deprecated
-    public long getEventEndWorldTime() {
-        return activeEvent == null ? 0L : activeEvent.getEndWorldTime();
-    }
-
-    /** @deprecated 新代码使用 EventState。 */
-    @Deprecated
-    public void setEventEndWorldTime(long value) {
-        ensureActiveEvent().setEndWorldTime(value);
-    }
-
-    /** @deprecated 新代码使用 {@code getActiveEvent().getTargetCropType()}。 */
-    @Deprecated
-    public String getEventTargetCropType() {
-        return activeEvent == null || activeEvent.getTargetCropType() == null
-                ? null : activeEvent.getTargetCropType().name();
-    }
-
-    /** @deprecated 新代码使用 EventState。 */
-    @Deprecated
-    public void setEventTargetCropType(String cropType) {
-        if (cropType == null || cropType.isBlank()) {
-            if (activeEvent != null) {
-                activeEvent.setTargetCropType(null);
-            }
-            return;
-        }
-        try {
-            ensureActiveEvent().setTargetCropType(CropType.valueOf(cropType.trim()));
-        } catch (IllegalArgumentException unknown) {
-            ensureActiveEvent().setTargetCropType(null);
-        }
-    }
-
-    /** @deprecated 新代码使用 {@code getActiveEvent().getPayload()}。 */
-    @Deprecated
-    public String getEventPayload() {
-        return activeEvent == null ? null : activeEvent.getPayload();
-    }
-
-    /** @deprecated 新代码使用 EventState。 */
-    @Deprecated
-    public void setEventPayload(String payload) {
-        if (activeEvent == null && payload == null) {
-            return;
-        }
-        ensureActiveEvent().setPayload(payload);
-    }
-
-    private EventState ensureActiveEvent() {
-        if (activeEvent == null) {
-            activeEvent = new BasicEventState();
-        }
-        return activeEvent;
     }
 
     /** 玩家背包（永不为 null；空背包即空实例）。 */

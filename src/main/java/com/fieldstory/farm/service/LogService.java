@@ -18,17 +18,17 @@ import java.util.Optional;
  * 仍由 E 模块的 DAO / 启动装配层负责。
  *
  * <p>{@code buildOfflineLog} 保持为唯一抽象方法，使 B 的 Controller 测试和轻量 stub
- * 仍可使用 lambda；收获日志方法提供默认“未支持”实现，正式默认实现
+ * 可以继续使用 lambda；收获日志方法提供默认“未支持”实现，正式默认实现
  * {@code BasicLogService} 会覆盖它们。
  */
 @FunctionalInterface
 public interface LogService {
 
     /**
-     * 根据一次离线模拟结果生成玩家可读的离线日志。
+     * 根据一次离线模拟结果生成玩家可读离线日志。
      *
      * @param result 离线模拟结构化结果
-     * @return effectiveOfflineMinutes == 0 时返回 Optional.empty()
+     * @return 无有效离线推进时返回 Optional.empty()
      */
     Optional<OfflineLog> buildOfflineLog(OfflineSimulationResult result);
 
@@ -41,7 +41,9 @@ public interface LogService {
      * @param log 收获日志
      */
     default void append(HarvestLog log) {
-        throw new UnsupportedOperationException("HarvestLog append is not supported by this LogService implementation");
+        throw new UnsupportedOperationException(
+                "HarvestLog append is not supported by this LogService implementation"
+        );
     }
 
     /**
@@ -52,6 +54,8 @@ public interface LogService {
      * @return 收获日志列表
      */
     default List<HarvestLog> listAll() {
-        throw new UnsupportedOperationException("HarvestLog listing is not supported by this LogService implementation");
+        throw new UnsupportedOperationException(
+                "HarvestLog listing is not supported by this LogService implementation"
+        );
     }
 }

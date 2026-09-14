@@ -7,7 +7,6 @@ import com.fieldstory.farm.model.Soil;
 import com.fieldstory.farm.model.SoilState;
 import com.fieldstory.farm.model.WeatherType;
 import com.fieldstory.farm.service.DailySimulationResult;
-import com.fieldstory.farm.service.DecorationRateResolver;
 import com.fieldstory.farm.service.DaySettlementInput;
 import com.fieldstory.farm.service.DecorationRateResolver;
 import com.fieldstory.farm.service.EventService;
@@ -86,9 +85,9 @@ public class BasicWorldSimulationService implements WorldSimulationService {
         if (gameHours <= 0) {
             return List.of();
         }
-
+        // 坏数据兜底：rates 为 null 时降级 P0 单位倍率（GrowthRates 已内建非法值钳制）
         GrowthRates effectiveRates = rates == null ? GrowthRates.P0 : rates;
-        double elapsedGameDays = gameHours / 24.0;
+        double elapsedGameDays = gameHours / 24.0;   // 验收 §二十五：支持非整日成长
         List<Crop> newlyMatured = new ArrayList<>();
         for (Soil soil : farm.getSoils()) {
             if (soil.getState() != SoilState.PLANTED || soil.getCrop() == null) {

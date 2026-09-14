@@ -196,13 +196,4 @@ public class FarmGameModel {
         weatherState.setWeatherType(type);
         weatherState.setDayIndex(dayIndex);
     }
-
-    /**
-     * P2 类型化存档兼容入口：GameState 已直接保存 WeatherType 时无需转回字符串。
-     * null 仍按默认 SUNNY 恢复。
-     */
-    public void restoreWeather(WeatherType weatherType, int dayIndex) {
-        weatherState.setWeatherType(weatherType == null ? WeatherType.SUNNY : weatherType);
-        weatherState.setDayIndex(dayIndex);
-    }
 }

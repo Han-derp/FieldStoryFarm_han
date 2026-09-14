@@ -1,6 +1,7 @@
 package com.fieldstory.farm.controller;
 
 import com.fieldstory.farm.manager.GameManager;
+import com.fieldstory.farm.manager.OfflineStartupStep;
 import com.fieldstory.farm.manager.SceneManager;
 import com.fieldstory.farm.model.Crop;
 import com.fieldstory.farm.model.CropMemory;
@@ -11,6 +12,7 @@ import com.fieldstory.farm.model.Farm;
 import com.fieldstory.farm.model.FarmGameModel;
 import com.fieldstory.farm.model.GameState;
 import com.fieldstory.farm.model.GrowthStage;
+import com.fieldstory.farm.model.OfflineSimulationResult;
 import com.fieldstory.farm.model.Player;
 import com.fieldstory.farm.model.Soil;
 import com.fieldstory.farm.model.WeatherType;
@@ -34,6 +36,7 @@ import com.fieldstory.farm.service.HarvestTransactionService;
 import com.fieldstory.farm.service.LandService;
 import com.fieldstory.farm.service.LegendaryService;
 import com.fieldstory.farm.service.MemoryService;
+import com.fieldstory.farm.service.OfflineSimulationService;
 import com.fieldstory.farm.service.PlantingService;
 import com.fieldstory.farm.service.QualityService;
 import com.fieldstory.farm.service.SetService;
@@ -117,6 +120,19 @@ public class MainController {
     /** 允许注入 GameManager（单测用，避免触碰真实 SQLite 存档）。 */
     MainController(GameManager gameManager) {
         this.gameManager = gameManager;
+    }
+
+    /** E P2：B 提供的离线模拟实现；未注入时跳过离线结算（等价于"本局无离线"）。 */
+    private OfflineSimulationService offlineSimulationService;
+
+    /**
+     * 装配层/测试注入 B 的离线模拟实现。
+     *
+     * <p>E 只按《验收规范》§八十四固定顺序调用它，绝不自行实现离线成长/枯萎/事件算法
+     * （那属 B 模块）；离线日志与弹窗同样属 B，不在 E 的接线范围内。
+     */
+    void setOfflineSimulationService(OfflineSimulationService offlineSimulationService) {
+        this.offlineSimulationService = offlineSimulationService;
     }
 
     /** 本次会话是否已完成装配（防止重复点击重复装配）。 */
@@ -356,6 +372,10 @@ public class MainController {
             graduationService.evaluateAndGraduate();
         });
 
+        // E P2 启动顺序「离线一段」：统一时钟算离线时长 → B 的离线模拟 → 有进度则事务落盘。
+        // 离线日志（offline_log / OfflineLogController / OfflineLogPopupView）属 B，E 不生成。
+        runOfflineSimulationStep(model);
+
         // B P0 经济入口保持唯一 Player。
         // 新游戏严格保持 Player/GameManager 的正式初始状态：500 金币、三种种子库存均为 0。
         // 不得用 buySeed() “赠送”起始种子，否则会真实扣款 135 金币，导致 500 -> 365。
@@ -482,6 +502,23 @@ public class MainController {
         live.setEndWorldTime(saved.getEndWorldTime());
         live.setTargetCropType(saved.getTargetCropType());
         live.setPayload(saved.getPayload());
+    }
+
+    /**
+     * E P2 启动集成：离线一段（《验收规范》§八十四固定启动顺序第 6~8 步）。
+     *
+     * <p>原始离线真实分钟只从统一 {@link com.fieldstory.farm.model.GameClock#calculateOfflineDuration()}
+     * 取得（正式游戏时间统一走 GameClock，此处不读取任何系统时间）；随后交给 B 的
+     * {@link OfflineSimulationService#simulate(long)}。一旦产生离线进度
+     * （{@link OfflineSimulationResult#hasOfflineProgress()}），立即事务落盘，使"离开期间
+     * 发生的变化"随存档固化。B 的离线日志/弹窗是紧随其后的步骤，不在此处实现。
+     */
+    private void runOfflineSimulationStep(FarmGameModel model) {
+        OfflineSimulationResult result =
+                OfflineStartupStep.run(model.getGameClock(), offlineSimulationService);
+        if (result != null && result.hasOfflineProgress()) {
+            gameManager.saveNow();
+        }
     }
 
     /** 存档前回填生命记忆：内存服务是唯一权威来源，快照整体重建避免残留。 */

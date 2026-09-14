@@ -1,7 +1,5 @@
 package com.fieldstory.farm.model.impl;
 
-import com.fieldstory.farm.model.GameClock;
-
 import static com.fieldstory.farm.util.GameConstants.MINUTES_PER_DAY;
 
 /**
