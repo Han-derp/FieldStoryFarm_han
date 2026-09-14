@@ -37,7 +37,7 @@
 | D23 | GrowthRates 记录类替代无限加参（P0/P1 兼容红线） | 成长倍率三件套打包为不可变 `record GrowthRates(weatherRate, decorationRate, eventRate)`，一次组装、多作物复用，避免 growSegment 入参随倍率种数无限膨胀；P0/P1 三率恒 1.0（常量 `GrowthRates.P0 = (1.0, 1.0, 1.0)`，P0/P1 兼容红线）；紧凑构造内建钳制：非法值（<0 或 NaN）一律钳制为 0（异常输入不破坏状态，取 0 只让成长暂停） | `service/GrowthRates.java` 源码；计划书 P0「三率恒 1.0」与成长公式六因子；验收 §二十四/§四十九 |
 | D24 | A 只产 DailySimulationResult，落库归 B | `settleDay` 只返回摘要（§八十九 第⑨步 DailyLog 数据体），不收获、不出售、不动金币、不碰数据库与任何 DAO（验收 §八十六/§八十七）；DailyLog 落库由 E 的 DAO 完成，离线日志聚合归 B（模块分工第 5 行） | 验收 §八十六/§八十七/§八十九；《模块分工.md》第 4/5 行 |
 | D25 | 分段精度：游戏小时逐段，切点=日边界+事件结束+作物成熟 | 段时长用 `double gameHours`（游戏小时，验收 §二十五 支持非整日成长，禁止 `offlineHours ÷ 24` 粗暴处理）；切点三要素 = 游戏日 00:00 边界 + 事件结束时间 + 作物成熟时间（验收 §八十八）；`WorldTimeService.segmentCutPoints` 输出含起止点的升序去重切点列表，事件结束为 null 则忽略 | 验收 §二十五/§八十八；`service/WorldTimeService.java` 源码 |
-| D26 | > 在线白天的逐 tick 成长由 D 的 FarmController 改调 growSegment(farm, gameHours, rates)| （转交卡 D26：gameHours 由 GAME_DAYS_PER_TICK×24 折算，rates 按当日天气/装饰/事件组装），|与离线循环共用同一引擎与切段逻辑，禁止保留两套成长入口。
+| D26 | 在线接入改造走转交卡（E/D 改自己的文件） | A 只交付 `WorldTimeService`/`WorldSimulationService` 与三个记录类；在线跨天接线改造（E 装配层 onDayChanged 替换 P1 简接线）与 D 侧依赖调整以转交卡形式提出，由 E/D 改自己的文件，A 不修改 E/D 任何 .java | 《模块分工.md》第 4/8 行；P1 文档 §8.2 先例（advanceCrops 3 参改造由 D/E 执行） |
 | D27 | 雨天自动补水只增 rainCount 不动 manualWaterCount（口径，**待团队确认**） | 雨天补水效果：rainCount+1、lastHydratedWorldTime 更新、droughtStreak 重置；**不**增加 manualWaterCount、**不**加主动浇水成长 +5% / 品质 +3——雨天补水 ≠ 玩家主动浇水。补水计数的发生步骤口径（⑤⑥ 计数 vs ⑫ 计数）见 D30，本项与 D30 共同待团队确认 | 规则 §二十一；验收 §五十一 |
 | D28 | 72h 封顶后剩余时长丢弃 | `capOfflineRealMinutes = min(raw, 72)`，负数/0 返回 0；超出 72 现实分钟的部分**不模拟、不补偿、不结转到下次离线**，直接丢弃 | 验收 §八十三；规则 §七 |
 | D29 | settleDay 入参带 eventInEffect（当日生效事件，调用方读 EventState） | `DaySettlementInput.eventInEffect` 由调用方在**结算前**从 D 的 `EventState.getEventType()` 读取；§八十九 第⑨步 DailyLog 记录的是**当日生效事件**，非第⑬步次日抽取结果；`DailySimulationResult.event` 与入参同源 | 验收 §八十九 ⑨/⑬；`model/EventState.java` 只读用法；D P2 文档 §二 |
@@ -222,7 +222,9 @@ onDayChanged(day):
     farmView.refreshAll()
 ```
 
-> 在线白天的逐 tick 成长沿用 P1 已接线（D 的 advanceCrops → GrowthService.applyGrowth 3 参）；若在线期间需要跨日分段成长，复用 4.1 同款「segmentCutPoints → growSegment」循环（验收 §八十八），引擎与切段逻辑完全同一套。
+> 在线白天的逐 tick 成长由 D 的 FarmController 改调 growSegment(farm, gameHours, rates)
+> （转交卡 D26：gameHours 由 GAME_DAYS_PER_TICK×24 折算，rates 按当日天气/装饰/事件组装），
+> 与离线循环共用同一引擎与切段逻辑，禁止保留两套成长入口。
 
 ---
 
