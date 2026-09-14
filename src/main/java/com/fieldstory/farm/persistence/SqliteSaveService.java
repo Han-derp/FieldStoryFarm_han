@@ -4,10 +4,16 @@ import com.fieldstory.farm.model.DecorationState;
 import com.fieldstory.farm.model.GameState;
 import com.fieldstory.farm.model.Player;
 import com.fieldstory.farm.model.PlotState;
+import com.fieldstory.farm.model.CropMemory;
+import com.fieldstory.farm.model.WeatherType;
+import com.fieldstory.farm.model.item.Item;
+import com.fieldstory.farm.persistence.dao.ActiveEventDao;
 import com.fieldstory.farm.persistence.dao.CropDao;
+import com.fieldstory.farm.persistence.dao.CropMemoryDao;
 import com.fieldstory.farm.persistence.dao.DecorationDao;
 import com.fieldstory.farm.persistence.dao.FarmDao;
 import com.fieldstory.farm.persistence.dao.PlayerDao;
+import com.fieldstory.farm.persistence.dao.PlayerItemDao;
 import com.fieldstory.farm.persistence.dao.SoilDao;
 import com.fieldstory.farm.persistence.dao.WorldStateDao;
 import com.fieldstory.farm.service.SaveService;
@@ -138,6 +144,9 @@ public class SqliteSaveService implements SaveService {
         PlayerDao playerDao = new PlayerDao(connection);
         FarmDao farmDao = new FarmDao(connection);
         WorldStateDao worldStateDao = new WorldStateDao(connection);
+        CropMemoryDao cropMemoryDao = new CropMemoryDao(connection);
+        ActiveEventDao activeEventDao = new ActiveEventDao(connection);
+        PlayerItemDao playerItemDao = new PlayerItemDao(connection);
 
         // 先清子表再清父表，避免外键约束（crop 依赖 soil）
         cropDao.deleteAll();
@@ -148,6 +157,11 @@ public class SqliteSaveService implements SaveService {
         playerDao.deleteAll();
         farmDao.deleteAll();
         worldStateDao.deleteAll();
+        // P2：这三张表与其它表无外键关系，但同样是"全量覆盖"语义，必须一并清空，
+        // 否则删除过的记忆/事件/物品会残留在旧存档里（幽灵数据）
+        cropMemoryDao.deleteAll();
+        activeEventDao.deleteAll();
+        playerItemDao.deleteAll();
 
         Player player = state.getPlayer();
         if (player != null) {
@@ -193,10 +207,31 @@ public class SqliteSaveService implements SaveService {
             }
         }
 
-        // current_day_index 承载存档游戏天数；weather/last_real_time/random_seed 属 P1/P2，
-        // P1 先写 null，等 D 模块天气接入后由适配层补齐（列结构 §七十三 已就位）
+        // P2：生命记忆（收获后仍永久保留，§九十五）——以 cropUuid 覆盖式写入
+        for (CropMemory memory : state.getMemories()) {
+            if (memory != null) {
+                cropMemoryDao.upsert(memory);
+            }
+        }
+
+        // P2：当前随机事件快照（事件期间退出，回来不能凭空消失，§九十一）
+        if (state.getActiveEvent() != null) {
+            activeEventDao.upsert(state.getActiveEvent());
+        }
+
+        // P2：玩家背包物品（种子库存不在这里，见 player_seed）
+        playerItemDao.replaceAll(state.getInventory());
+
+        // current_day_index 承载存档游戏天数；weather 承接天气；world_total_minutes 为 P2 新增，
+        // 让读档精确回到"退出瞬间"（-1 = 未记录）。last_real_time 供 P2 离线模拟计算时长，
+        // P1 先写存档时刻的真实时间。
         worldStateDao.insert(new WorldStateDao.WorldStateRow(
-                state.getCurrentWorldTime(), null, null, state.getGameDay(), null));
+                state.getCurrentWorldTime(),
+                LocalDateTime.now().toString(),
+                state.getCurrentWeather() == null ? null : state.getCurrentWeather().name(),
+                state.getGameDay(),
+                null,
+                state.getWorldTotalMinutes()));
     }
 
     /**
@@ -220,6 +255,9 @@ public class SqliteSaveService implements SaveService {
         if (worldState != null) {
             state.setGameDay(worldState.currentDayIndex());
             state.setCurrentWorldTime(worldState.currentWorldTime());
+            state.setWorldTotalMinutes(worldState.worldTotalMinutes());
+            state.setCurrentWeather(parseEnum(WeatherType.class, worldState.currentWeather()));
+            state.setWeatherDayIndex((int) worldState.currentDayIndex());
         }
 
         Map<Long, CropDao.CropRow> cropsBySoil = new HashMap<>();
@@ -245,8 +283,27 @@ public class SqliteSaveService implements SaveService {
             state.getDecorations().add(decoration);
         }
 
+        // P2：生命记忆 / 当前事件 / 背包物品
+        state.getMemories().addAll(new CropMemoryDao(connection).findAll());
+        state.setActiveEvent(new ActiveEventDao(connection).find());
+        for (Item item : new PlayerItemDao(connection).load().listItems()) {
+            state.getInventory().addItem(item);
+        }
+
         warnOnMapSizeMismatch(new FarmDao(connection).findMapSize());
         return state;
+    }
+
+    /** 宽容解析枚举名；null/空/非法一律返回 null（坏数据不让读档崩溃）。 */
+    private static <E extends Enum<E>> E parseEnum(Class<E> type, String name) {
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        try {
+            return Enum.valueOf(type, name.trim());
+        } catch (IllegalArgumentException unknown) {
+            return null;
+        }
     }
 
     private static void applyCrop(PlotState plot, CropDao.CropRow crop) {
