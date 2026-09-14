@@ -193,10 +193,12 @@ public class SqliteSaveService implements SaveService {
             }
         }
 
-        // current_day_index 承载存档游戏天数；weather/last_real_time/random_seed 属 P1/P2，
-        // P1 先写 null，等 D 模块天气接入后由适配层补齐（列结构 §七十三 已就位）
+        // current_day_index 承载存档游戏天数；current_weather 承载当前天气枚举名
+        // （D 模块 P1 天气接入后由装配层经 beforeSaveHook 写入，验收 §七十三）；
+        // last_real_time/random_seed 属 P2 离线模拟，P1 先写 null（列结构 §七十三 已就位）
         worldStateDao.insert(new WorldStateDao.WorldStateRow(
-                state.getCurrentWorldTime(), null, null, state.getGameDay(), null));
+                state.getCurrentWorldTime(), null, state.getCurrentWeather(),
+                state.getGameDay(), null));
     }
 
     /**
@@ -220,6 +222,7 @@ public class SqliteSaveService implements SaveService {
         if (worldState != null) {
             state.setGameDay(worldState.currentDayIndex());
             state.setCurrentWorldTime(worldState.currentWorldTime());
+            state.setCurrentWeather(worldState.currentWeather());
         }
 
         Map<Long, CropDao.CropRow> cropsBySoil = new HashMap<>();

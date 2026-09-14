@@ -24,6 +24,10 @@ public class GameState {
      *  D 模块时钟接入前新档可为 null） */
     private String currentWorldTime;
 
+    /** 当前天气枚举名（D 模块 P1 天气接入后由装配层写入；验收 §七十三
+     *  {@code world_state.current_weather}；新档/未接入时为 null） */
+    private String currentWeather;
+
     /** 已解锁内容标识集合（P3 土地解锁/商店接入后使用，P0 默认为空） */
     private final java.util.Set<String> unlocked = new java.util.LinkedHashSet<>();
 
@@ -66,6 +70,22 @@ public class GameState {
 
     public void setCurrentWorldTime(String currentWorldTime) {
         this.currentWorldTime = currentWorldTime;
+    }
+
+    /**
+     * 当前天气枚举名（{@code SUNNY}/{@code RAIN}/{@code DROUGHT}/{@code GREEN_RAIN}）。
+     *
+     * <p>对应 {@code world_state.current_weather}（验收 §七十三）；枚举名即存档字符串，
+     * 禁止改动（D 模块 P1 文档 §4.1）。未接入天气或新档时为 null。
+     *
+     * @return 天气枚举名，可为 null
+     */
+    public String getCurrentWeather() {
+        return currentWeather;
+    }
+
+    public void setCurrentWeather(String currentWeather) {
+        this.currentWeather = currentWeather;
     }
 
     /** 已解锁内容标识集合。 */

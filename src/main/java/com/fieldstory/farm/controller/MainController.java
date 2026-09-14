@@ -139,12 +139,14 @@ public class MainController {
         //     农场保持初始 EMPTY（不再出现"作物/地块读不回来"的空档）。
         FarmStateAdapter.restore(state, farm);
         restoreGameDay(state, model);
+        restoreWeather(state, model);
 
         // c2. 注册存档前回填：手动保存与退出自动保存落盘前，把运行中农场（地块/作物）
-        //     与当前游戏天数同步回 GameState，保证下次进入能恢复到退出瞬间。
+        //     与当前游戏天数、当前天气同步回 GameState，保证下次进入能恢复到退出瞬间。
         gameManager.setBeforeSaveHook(() -> {
             FarmStateAdapter.capture(state, farm);
             state.setGameDay(model.getGameClock().getGameDay());
+            captureWeather(state, model);
         });
 
         // d. 经济服务 + 新档赠送起始种子（每样 3 颗、扣金币）。
@@ -209,12 +211,43 @@ public class MainController {
     }
 
     /**
-     * 跨天回调：滚动当日天气 → 对已播种作物记录天气并判定枯萎（A 模块 P1 设计文档 §8.2）
+     * 读档还原天气到模型（验收规范 §七十三 {@code world_state.current_weather}）。
+     *
+     * <p>把存档中的天气枚举名与天气日索引还原到 {@link FarmGameModel} 的天气状态；
+     * 无天气记录（新档/旧档）时保持默认晴天（D 模块 P1 文档 §4.1）。
+     */
+    private static void restoreWeather(GameState state, FarmGameModel model) {
+        String weatherName = state.getCurrentWeather();
+        if (weatherName == null || weatherName.isBlank()) {
+            return;
+        }
+        model.restoreWeather(weatherName, (int) state.getGameDay());
+    }
+
+    /**
+     * 存档前回填天气：把运行中模型的当前天气枚举名写回 {@link GameState}，
+     * 供 E 模块落库到 {@code world_state.current_weather}（验收规范 §七十三）。
+     *
+     * <p>天气日索引与游戏天数同源（天气按当前游戏日生成，D 模块 P1 文档 §4.2），
+     * 故 {@code current_day_index} 由 {@code state.gameDay} 承载，无需另存。
+     */
+    private static void captureWeather(GameState state, FarmGameModel model) {
+        WeatherType type = model.getWeatherState().getWeatherType();
+        state.setCurrentWeather(type == null ? null : type.name());
+    }
+
+    /**
+     * 跨天回调：滚动当日天气 → 关闭过期事件 → 抽取当天事件（验收规范 §八十九 ⑧/⑬）
+     * → 对已播种作物记录天气并判定枯萎（A 模块 P1 设计文档 §8.2）
      * → 按经过天数推进幸存作物成长（带天气倍率，验收规范 §四十九）→ 刷新农场视图。
      *
      * <p>枯萎接线顺序不可打乱：先 {@code recordDailyWeather} 再 {@code judgeWither}；
      * 已枯萎作物由 {@code applyGrowth} 的 WITHERED 守卫跳过（A 模块设计文档 §6.3）。
      * worldTime 按 day×24+hour 计算（决策 D14，GameClock 不提供 getWorldTime）。
+     *
+     * <p>事件接线（D 模块 P2，验收规范 §八十九 ⑧/⑬）：先 {@code expireIfNeeded} 关闭
+     * 已到期事件，再 {@code rollDailyEvent} 抽取当天事件（每日最多 1 个，一次抽取）。
+     * D 只提供规则，跨日调用由本装配层协调（D 模块 P2 跨模块接口约定文档 §六 矛盾 2）。
      */
     private void applyDailyGrowth(Farm farm, GrowthService growth, WitherService wither,
                                   FarmViewController farmViewController, FarmGameModel model) {
@@ -224,6 +257,9 @@ public class MainController {
             WeatherType today = model.getWeatherService().rollDailyWeather(currentDay);
             double weatherRate = model.getWeatherService().getGrowthRate(today);
             long worldTime = currentDay * 24L + model.getGameClock().getGameHour();
+            // ⑧ 关闭过期事件 → ⑬ 抽取当天事件（每日最多 1 个，一次抽取）
+            model.getEventService().expireIfNeeded(worldTime);
+            model.getEventService().rollDailyEvent(currentDay);
             for (Soil soil : farm.getSoils()) {
                 Crop crop = soil.getCrop();
                 if (crop != null) {
