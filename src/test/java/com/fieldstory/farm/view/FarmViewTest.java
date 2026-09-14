@@ -256,4 +256,106 @@ class FarmViewTest {
 
         assertEquals("小麦 成长50% 今日未浇", FarmView.tooltipTextFor(soil, 0L));
     }
+
+    // ==================== groundVariantFor：地面贴图变体（UI规范 §6 地图、§7 Tile 组合；决策 D-G2/D-G3） ====================
+
+    @Test
+    void groundVariantForDecorationAreaIsGrass() {
+        assertEquals(GroundVariant.GRASS,
+                FarmView.groundVariantFor(FarmPlot.DECORATION_AREA, null, 0L, false));
+    }
+
+    @Test
+    void groundVariantForNullSoilIsGrass() {
+        assertEquals(GroundVariant.GRASS,
+                FarmView.groundVariantFor(FarmPlot.FARM_PLOT, null, 0L, false));
+    }
+
+    @Test
+    void groundVariantForEmptyIsNone() {
+        assertEquals(GroundVariant.NONE,
+                FarmView.groundVariantFor(FarmPlot.FARM_PLOT, soil(SoilState.EMPTY), 0L, false));
+    }
+
+    @Test
+    void groundVariantForLockedIsNone() {
+        assertEquals(GroundVariant.NONE,
+                FarmView.groundVariantFor(FarmPlot.FARM_PLOT, soil(SoilState.LOCKED), 0L, false));
+    }
+
+    @Test
+    void groundVariantForTilledDryIsTilled() {
+        assertEquals(GroundVariant.TILLED,
+                FarmView.groundVariantFor(FarmPlot.FARM_PLOT, soil(SoilState.TILLED), 0L, false));
+    }
+
+    @Test
+    void groundVariantForTilledWetIsWet() {
+        assertEquals(GroundVariant.WET,
+                FarmView.groundVariantFor(FarmPlot.FARM_PLOT, soil(SoilState.TILLED), 0L, true));
+    }
+
+    /** PLANTED 未浇且干 → TILLED（决策 D-G2：湿判定双条件均不满足）。 */
+    @Test
+    void groundVariantForPlantedNotWateredDryIsTilled() {
+        assertEquals(GroundVariant.TILLED,
+                FarmView.groundVariantFor(FarmPlot.FARM_PLOT, plantedSoil(GrowthStage.GROWING, -1), 0L, false));
+    }
+
+    /** PLANTED 今日已浇 → WET（lastManualWaterGameDay == currentGameDay，决策 D14 long 用 ==）。 */
+    @Test
+    void groundVariantForPlantedWateredTodayIsWet() {
+        assertEquals(GroundVariant.WET,
+                FarmView.groundVariantFor(FarmPlot.FARM_PLOT, plantedSoil(GrowthStage.GROWING, 3L), 3L, false));
+    }
+
+    /** PLANTED 湿天 → WET（决策 D-G2：今日天气 ∈ {RAIN, GREEN_RAIN}，由调用方换算 wetToday）。 */
+    @Test
+    void groundVariantForPlantedWetDayIsWet() {
+        assertEquals(GroundVariant.WET,
+                FarmView.groundVariantFor(FarmPlot.FARM_PLOT, plantedSoil(GrowthStage.GROWING, -1), 0L, true));
+    }
+
+    @Test
+    void groundVariantForMatureIsNone() {
+        assertEquals(GroundVariant.NONE,
+                FarmView.groundVariantFor(FarmPlot.FARM_PLOT, plantedSoil(GrowthStage.MATURE, -1), 0L, false));
+    }
+
+    @Test
+    void groundVariantForWitheredIsNone() {
+        assertEquals(GroundVariant.NONE,
+                FarmView.groundVariantFor(FarmPlot.FARM_PLOT, plantedSoil(GrowthStage.WITHERED, -1), 0L, false));
+    }
+
+    // ==================== groundVariantFor 坏数据兜底：null 输入不抛 NPE（口径同 cropFrameIndexFor） ====================
+
+    /** plotType 为 null 视同非种植格 → GRASS（同 tileColorFor 口径），不抛 NPE。 */
+    @Test
+    void groundVariantForNullPlotTypeIsGrass() {
+        assertEquals(GroundVariant.GRASS, FarmView.groundVariantFor(null, null, 0L, false));
+    }
+
+    /** PLANTED 但 crop 为 null（存档坏数据）→ 仅按天气判定，不抛 NPE。 */
+    @Test
+    void groundVariantForPlantedNullCropDryIsTilled() {
+        assertEquals(GroundVariant.TILLED,
+                FarmView.groundVariantFor(FarmPlot.FARM_PLOT, soil(SoilState.PLANTED), 0L, false));
+    }
+
+    /** PLANTED 但 crop 为 null + 湿天 → WET，不抛 NPE。 */
+    @Test
+    void groundVariantForPlantedNullCropWetDayIsWet() {
+        assertEquals(GroundVariant.WET,
+                FarmView.groundVariantFor(FarmPlot.FARM_PLOT, soil(SoilState.PLANTED), 0L, true));
+    }
+
+    /** state 为 null（适配层坏数据）→ NONE，不抛 NPE。 */
+    @Test
+    void groundVariantForNullStateIsNone() {
+        Soil soil = new BasicSoil(2, 2);
+        soil.setState(null);
+        assertEquals(GroundVariant.NONE,
+                FarmView.groundVariantFor(FarmPlot.FARM_PLOT, soil, 0L, false));
+    }
 }

@@ -84,7 +84,9 @@ class FarmViewCropSpriteIntegrationTest {
     private static List<ImageView> visibleSprites(FarmView view) {
         List<ImageView> sprites = new ArrayList<>();
         for (Node child : view.getChildren()) {
-            if (child instanceof ImageView sprite && sprite.isVisible()) {
+            // 👈 加上 "cropSprite".equals(sprite.getUserData())，只认我们打过记号的贴图
+            if (child instanceof ImageView sprite && sprite.isVisible()
+                    && "cropSprite".equals(sprite.getUserData())) {
                 sprites.add(sprite);
             }
         }

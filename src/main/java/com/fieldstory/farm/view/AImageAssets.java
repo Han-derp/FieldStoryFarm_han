@@ -50,6 +50,9 @@ final class AImageAssets {
      * @return 切片贴图视图；无法识别或加载失败时为 null
      */
     static ImageView viewFor(CropType type, GrowthStage stage) {
+        if (type == null || stage == null) {
+            return null;
+        }
         CropSpriteSheet sheet = CropSpriteSheet.forCropType(type);
         if (sheet == null) {
             return null;
