@@ -10,6 +10,7 @@ import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Tooltip;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -140,6 +141,9 @@ public class FarmView extends Pane {
 
     /** 每格 P0 作物占位块（PLANTED 且未成熟时可见） */
     private final Rectangle[][] cropBlocks = new Rectangle[MAP_SIZE][MAP_SIZE];
+
+    /** 每格 P1 作物贴图层（决策 D1/D2/D3：2× 放大、底对齐、MATURE 末帧；贴图缺失时隐藏回退方块） */
+    private final ImageView[][] cropSprites = new ImageView[MAP_SIZE][MAP_SIZE];
 
     /** 每格 Tooltip（存引用以便刷新文案） */
     private final Tooltip[][] tooltips = new Tooltip[MAP_SIZE][MAP_SIZE];
@@ -372,12 +376,22 @@ public class FarmView extends Pane {
                 cropBlock.setVisible(false);
                 cropBlocks[row][column] = cropBlock;
                 getChildren().add(cropBlock);
+
+                // P1 作物贴图层（z 序：tile → cropBlock → cropSprite，保持行优先）
+                ImageView cropSprite = new ImageView();
+                cropSprite.setVisible(false);
+                cropSprite.setMouseTransparent(true);  // 鼠标穿透：悬停/点击作用于地块
+                cropSprites[row][column] = cropSprite;
+                getChildren().add(cropSprite);
+
                 updateCropBlock(row, column, plotType, soil);
             }
         }
     }
 
-    /** 按格当前状态刷新作物占位块（位置居中于格内）。 */
+    /**
+     * 按格当前状态刷新作物占位块（位置居中于格内），并联动刷新贴图层（P1）。
+     */
     private void updateCropBlock(int row, int column, FarmPlot plotType, Soil soil) {
         Rectangle cropBlock = cropBlocks[row][column];
         Crop crop = soil == null ? null : soil.getCrop();
@@ -388,14 +402,66 @@ public class FarmView extends Pane {
                 && crop.getGrowthStage() != GrowthStage.MATURE;
         if (!visible) {
             cropBlock.setVisible(false);
+        } else {
+            int size = cropBlockSizeFor(crop.getGrowthStage());
+            cropBlock.setWidth(size);
+            cropBlock.setHeight(size);
+            cropBlock.setX(column * TILE_SIZE + (TILE_SIZE - size) / 2.0);
+            cropBlock.setY(row * TILE_SIZE + (TILE_SIZE - size) / 2.0);
+            cropBlock.setVisible(true);
+        }
+        updateCropSprite(row, column, plotType, soil);
+    }
+
+    /**
+     * P1 作物贴图层刷新（UI规范 §7 Tile 组合策略；决策 D1/D2/D3）。
+     *
+     * <p>显示条件：FARM_PLOT + PLANTED + 作物非空 + 阶段非空且非 WITHERED；
+     * MATURE 显示末帧贴图并保留整格高亮底色（决策 D2）。贴图经
+     * {@link AImageAssets#viewFor} 切取，2× 放大后底对齐水平居中，
+     * 高于格子上边界时向上越界不裁切（决策 D1）。
+     *
+     * <p>坏数据兜底：crop_type/stage 为 null、图集缺失或加载失败时
+     * {@code viewFor} 返回 null，此时仅隐藏贴图层，方块逻辑保持原样
+     * （含 MATURE 整格高亮），外观与行为与改造前完全一致。
+     *
+     * @param row      全局行坐标
+     * @param column   全局列坐标
+     * @param plotType 格类型
+     * @param soil     该格土地（装饰区为 null）
+     */
+    private void updateCropSprite(int row, int column, FarmPlot plotType, Soil soil) {
+        ImageView cropSprite = cropSprites[row][column];
+        Crop crop = soil == null ? null : soil.getCrop();
+        boolean showSprite = plotType == FarmPlot.FARM_PLOT
+                && soil != null
+                && soil.getState() == SoilState.PLANTED
+                && crop != null
+                && crop.getGrowthStage() != null
+                && crop.getGrowthStage() != GrowthStage.WITHERED;
+        if (!showSprite) {
+            // 非种植格/无作物/阶段坏数据/WITHERED（决策 D3）：不显示贴图
+            cropSprite.setVisible(false);
             return;
         }
-        int size = cropBlockSizeFor(crop.getGrowthStage());
-        cropBlock.setWidth(size);
-        cropBlock.setHeight(size);
-        cropBlock.setX(column * TILE_SIZE + (TILE_SIZE - size) / 2.0);
-        cropBlock.setY(row * TILE_SIZE + (TILE_SIZE - size) / 2.0);
-        cropBlock.setVisible(true);
+        ImageView view = AImageAssets.viewFor(crop.getCropType(), crop.getGrowthStage());
+        if (view == null) {
+            // 贴图缺失或枚举坏数据：隐藏贴图，方块逻辑原样（含 MATURE 整格高亮）
+            cropSprite.setVisible(false);
+            return;
+        }
+        cropSprite.setImage(view.getImage());
+        cropSprite.setViewport(view.getViewport());
+        cropSprite.setFitWidth(view.getFitWidth());
+        cropSprite.setFitHeight(view.getFitHeight());
+        cropSprite.setPreserveRatio(view.isPreserveRatio());
+        cropSprite.setSmooth(view.isSmooth());
+        // 底对齐水平居中（决策 D1）：放大后高于格子时向上越界，不裁切不缩小
+        cropSprite.setX(column * TILE_SIZE + (TILE_SIZE - cropSprite.getFitWidth()) / 2.0);
+        cropSprite.setY((row + 1) * TILE_SIZE - cropSprite.getFitHeight());
+        cropSprite.setVisible(true);
+        // 避免贴图与 P0 占位块双显示（MATURE 方块本已隐藏，此处幂等）
+        cropBlocks[row][column].setVisible(false);
     }
 
     /** 动作完成后刷新对应格：底色 + 作物块 + Tooltip 文案。 */
