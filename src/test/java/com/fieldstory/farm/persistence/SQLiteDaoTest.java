@@ -62,7 +62,7 @@ class SQLiteDaoTest {
             assertEquals(SchemaMigrator.SCHEMA_VERSION, SchemaMigrator.readVersion(connection));
             for (String table : new String[]{
                     "player", "player_seed", "unlocked", "farm", "soil", "crop", "decoration",
-                    "world_state", "meta"}) {
+                    "world_state", "meta", "active_event"}) {
                 assertTrue(tableExists(connection, table), "缺少表: " + table);
             }
         }
