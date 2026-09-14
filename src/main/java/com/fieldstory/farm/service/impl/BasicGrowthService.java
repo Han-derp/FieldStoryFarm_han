@@ -2,6 +2,7 @@ package com.fieldstory.farm.service.impl;
 
 import com.fieldstory.farm.model.Crop;
 import com.fieldstory.farm.model.GrowthStage;
+import com.fieldstory.farm.service.GrowthRates;
 import com.fieldstory.farm.service.GrowthService;
 import com.fieldstory.farm.service.WateringService;
 
@@ -17,6 +18,11 @@ import com.fieldstory.farm.service.WateringService;
  * 公式 {@code Base × Days × WeatherRate × OperationRate}（验收规范 §四十九）；
  * 2 参实现委托 3 参（rate=1.0），P0 行为不变；
  * {@code applyGrowth} 带 WITHERED 守卫（A 模块设计文档 §6.3）。
+ *
+ * <p>P2 升级（D 模块 P2 文档 §二；计划书 §5 六因子）：override 4 参重载，
+ * 公式 {@code Base × Days × WeatherRate × DecorationRate × EventRate × OperationRate}；
+ * 3 参实现委托 4 参（DecorationRate/EventRate 取 1.0），P0/P1 行为不变；
+ * 4 参三率由 {@link GrowthRates} 构造时已钳制非法值（&lt;0/NaN → 0）。
  *
  * <p>本实现为纯函数服务，不依赖 GameClock、不使用系统时间：
  * {@code elapsedGameDays} 由调用方按"经过游戏小时 ÷ 24"折算传入
@@ -47,16 +53,27 @@ public class BasicGrowthService implements GrowthService {
     @Override
     public double calculateGrowthDelta(Crop crop, double elapsedGameDays,
             double weatherRate) {
+        // 3 参 = 4 参(DecorationRate/EventRate=1.0)，维持 P1 行为与单公式实现点
+        // （A 模块设计文档 §6 先例：低参委托高参）。
+        return calculateGrowthDelta(crop, elapsedGameDays,
+                new GrowthRates(weatherRate, 1.0, 1.0));
+    }
+
+    @Override
+    public double calculateGrowthDelta(Crop crop, double elapsedGameDays,
+            GrowthRates rates) {
         // 坏数据兜底：crop_type 无法识别时为 null（存档允许 crop_type=NULL），
         // 无法取每日基础进度，降级为 0（不成长）而非抛 NPE 中断跨天循环。
         if (crop.getCropType() == null) {
             return 0.0;
         }
         double base = crop.getCropType().getBaseDailyProgress();
-        // P1 公式（验收规范 §四十九）：Base × Days × WeatherRate × OperationRate；
-        // DecorationRate P1 不加（预留第 4 参，A 模块设计文档 §6.4）
+        // P2 公式（计划书 §5 六因子；验收规范 §四十九；D 模块 P2 文档 §二）：
+        // Base × Days × WeatherRate × DecorationRate × EventRate × OperationRate；
+        // OperationRate = 1 + 浇水加成（维持 P1 内部口径，验收规范 §二十四）。
         double operationRate = 1.0 + wateringService.calculateWaterGrowthBonus(crop);
-        return base * elapsedGameDays * weatherRate * operationRate;
+        return base * elapsedGameDays * rates.weatherRate() * rates.decorationRate()
+                * rates.eventRate() * operationRate;
     }
 
     @Override
@@ -67,13 +84,20 @@ public class BasicGrowthService implements GrowthService {
     @Override
     public void applyGrowth(Crop crop, double elapsedGameDays,
             double weatherRate) {
-        // P1 守卫：枯萎作物不再成长（A 模块设计文档 §6.3），
-        // 防止 stageOf 把 WITHERED 重算回正常阶段。
+        // 3 参 = 4 参(DecorationRate/EventRate=1.0)，维持 P1 行为（守卫同源）
+        applyGrowth(crop, elapsedGameDays, new GrowthRates(weatherRate, 1.0, 1.0));
+    }
+
+    @Override
+    public void applyGrowth(Crop crop, double elapsedGameDays,
+            GrowthRates rates) {
+        // WITHERED 守卫：枯萎作物不再成长（A 模块设计文档 §6.3），
+        // 防止 stageOf 把 WITHERED 重算回正常阶段；P2 延续至 4 参入口。
         if (crop.getGrowthStage() == GrowthStage.WITHERED) {
             return;
         }
         double newProgress = Math.min(100.0, crop.getGrowthProgress()
-                + calculateGrowthDelta(crop, elapsedGameDays, weatherRate));
+                + calculateGrowthDelta(crop, elapsedGameDays, rates));
         crop.setGrowthProgress(newProgress);
         crop.setGrowthStage(stageOf(newProgress));
     }

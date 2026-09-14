@@ -15,6 +15,11 @@ import com.fieldstory.farm.model.Crop;
  * 验收规范 §四十九），默认委托 2 参版本（weatherRate=1.0），P0 完全兼容；
  * DecorationRate P1 不加，预留第 4 参扩展（A 模块设计文档 §6.4）。
  *
+ * <p>P2 升级（D 模块 P2 文档 §二；计划书 §5 六因子）：{@code applyGrowth} 与
+ * {@code calculateGrowthDelta} 各加 4 参重载（第四参 {@link GrowthRates}，
+ * 天气/装饰/事件三率一次传入），默认委托 3 参版本（weatherRate），
+ * P0/P1 完全兼容；彩虹日 EventRate = 2.0、其余 1.0。
+ *
  * <p>本接口为纯函数服务，不依赖 GameClock（接口层禁止 import GameClock）：
  * elapsedGameDays 由调用方按"经过游戏小时 ÷ 24"折算传入，
  * 必须支持非整日成长（验收规范 §二十五）。
@@ -86,5 +91,40 @@ public interface GrowthService {
     default void applyGrowth(Crop crop, double elapsedGameDays,
             double weatherRate) {
         applyGrowth(crop, elapsedGameDays);
+    }
+
+    /**
+     * 计算单次成长增量（4 参重载，纯函数，不修改作物状态）。
+     *
+     * <p>P2 公式（计划书 §5 六因子；验收规范 §四十九；D 模块 P2 文档 §二）：
+     * {@code BaseDailyProgress × ElapsedGameDays × WeatherRate
+     * × DecorationRate × EventRate × OperationRate}。
+     *
+     * <p>默认委托 3 参版本（只取 weatherRate），P0/P1 完全兼容
+     * （A 模块设计文档 §6 先例）。
+     *
+     * @param crop            目标作物
+     * @param elapsedGameDays 经过的游戏天数（经过游戏小时 ÷ 24，验收规范 §二十五）
+     * @param rates           天气/装饰/事件三率（{@link GrowthRates}，非法值已钳制）
+     * @return 成长增量
+     */
+    default double calculateGrowthDelta(Crop crop, double elapsedGameDays,
+            GrowthRates rates) {
+        return calculateGrowthDelta(crop, elapsedGameDays, rates.weatherRate());
+    }
+
+    /**
+     * 应用成长（4 参重载）：累加成长值 → Math.min 封顶 100 → 按阈值更新阶段。
+     *
+     * <p>默认委托 3 参版本（只取 weatherRate），P0/P1 完全兼容；
+     * WITHERED 守卫由实现层维持（A 模块设计文档 §6.3）。
+     *
+     * @param crop            目标作物
+     * @param elapsedGameDays 经过的游戏天数
+     * @param rates           天气/装饰/事件三率（{@link GrowthRates}，非法值已钳制）
+     */
+    default void applyGrowth(Crop crop, double elapsedGameDays,
+            GrowthRates rates) {
+        applyGrowth(crop, elapsedGameDays, rates.weatherRate());
     }
 }
