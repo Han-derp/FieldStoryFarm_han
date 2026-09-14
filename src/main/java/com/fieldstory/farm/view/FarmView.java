@@ -567,7 +567,12 @@ public class FarmView extends Pane {
         int row = soil.getRow();
         int column = soil.getColumn();
         tooltips[row][column].setText(message);
-        tooltips[row][column].show(tiles[row][column], TILE_SIZE / 2.0, TILE_SIZE / 2.0);
+        // 守卫：无窗口环境（单元测试）跳过 .show()，避免
+        // "The owner node needs to be associated with a window"
+        Rectangle tile = tiles[row][column];
+        if (tile.getScene() != null && tile.getScene().getWindow() != null) {
+            tooltips[row][column].show(tile, TILE_SIZE / 2.0, TILE_SIZE / 2.0);
+        }
     }
 
     // ==================== 按钮（UI规范 §13） ====================

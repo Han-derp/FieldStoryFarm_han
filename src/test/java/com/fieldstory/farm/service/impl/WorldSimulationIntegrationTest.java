@@ -318,6 +318,10 @@ class WorldSimulationIntegrationTest {
         riskySprout.setDroughtStreak(2);
         Crop seedCrop = plantWheat(farm, 2, 3, GrowthStage.SEED, 0.0);
 
+        // 模拟第 4 天日末 ⑪ 掷出第 5 天天气 DROUGHT（§八十九：settleDay 内部
+        // 只掷次日天气，当日天气由调用方在上一个日末驱动，见 §4.1 驱动循环）
+        weather.rollDailyWeather(5);
+
         DailySimulationResult result = simulation.settleDay(farm, settlementInput(
                 5L, DAY5_END, WORST_CASE_ROLLS));
 
