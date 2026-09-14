@@ -1,19 +1,26 @@
 package com.fieldstory.farm.persistence;
 
 import com.fieldstory.farm.model.DecorationState;
+import com.fieldstory.farm.model.CollectionStatus;
+import com.fieldstory.farm.model.CropQualityKey;
+import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.GameState;
+import com.fieldstory.farm.model.GraduationState;
 import com.fieldstory.farm.model.Player;
 import com.fieldstory.farm.model.PlotState;
 import com.fieldstory.farm.model.CropMemory;
 import com.fieldstory.farm.model.WeatherType;
 import com.fieldstory.farm.model.item.Item;
 import com.fieldstory.farm.persistence.dao.ActiveEventDao;
+import com.fieldstory.farm.persistence.dao.CollectionDao;
 import com.fieldstory.farm.persistence.dao.CropDao;
 import com.fieldstory.farm.persistence.dao.CropMemoryDao;
 import com.fieldstory.farm.persistence.dao.DecorationDao;
 import com.fieldstory.farm.persistence.dao.FarmDao;
+import com.fieldstory.farm.persistence.dao.GraduationDao;
 import com.fieldstory.farm.persistence.dao.PlayerDao;
 import com.fieldstory.farm.persistence.dao.PlayerItemDao;
+import com.fieldstory.farm.persistence.dao.SetCollectionDao;
 import com.fieldstory.farm.persistence.dao.SoilDao;
 import com.fieldstory.farm.persistence.dao.WorldStateDao;
 import com.fieldstory.farm.service.SaveService;
@@ -26,7 +33,9 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * P1 SQLite 正式存档实现（验收规范 §七十一~§七十五）。
@@ -44,6 +53,11 @@ import java.util.Map;
  * </ul>
  *
  * <p>业务层只依赖 {@link SaveService} 接口，替换实现不影响调用方（脚手架 §3.2）。
+ *
+ * <p><b>P3 增量（验收规范 §一百一十~§一百二十九）：</b>收集图鉴
+ * （{@code crop_collection}/{@code decoration_collection}/{@code legendary_collection}）、
+ * 套装状态（{@code set_collection}）与毕业状态（{@code graduation}）同样是「全量覆盖」的
+ * 会话状态，随 {@link GameState} 一起清表—重写，保证 FarmScore 与毕业跨退出重进不丢失。
  */
 public class SqliteSaveService implements SaveService {
 
@@ -147,6 +161,9 @@ public class SqliteSaveService implements SaveService {
         CropMemoryDao cropMemoryDao = new CropMemoryDao(connection);
         ActiveEventDao activeEventDao = new ActiveEventDao(connection);
         PlayerItemDao playerItemDao = new PlayerItemDao(connection);
+        CollectionDao collectionDao = new CollectionDao(connection);
+        SetCollectionDao setCollectionDao = new SetCollectionDao(connection);
+        GraduationDao graduationDao = new GraduationDao(connection);
 
         // 先清子表再清父表，避免外键约束（crop 依赖 soil）
         cropDao.deleteAll();
@@ -162,6 +179,11 @@ public class SqliteSaveService implements SaveService {
         cropMemoryDao.deleteAll();
         activeEventDao.deleteAll();
         playerItemDao.deleteAll();
+        // P3：收集图鉴 / 套装 / 毕业同样是"全量覆盖"语义，必须一并清空，
+        // 否则被取消收集的残留行会成为幽灵数据（收藏本应只增，但重开新档要能清零）。
+        collectionDao.deleteAll();
+        setCollectionDao.deleteAll();
+        graduationDao.deleteAll();
 
         Player player = state.getPlayer();
         if (player != null) {
@@ -232,6 +254,35 @@ public class SqliteSaveService implements SaveService {
                 state.getGameDay(),
                 null,
                 state.getWorldTotalMinutes()));
+
+        // P3：收集图鉴（永久保存，退出重进不丢 FarmScore，验收规范 §一百三十二 ⑤）
+        for (CropQualityKey key : state.getCollection().getCrops().keySet()) {
+            CollectionStatus status = state.getCollection().getCrops().get(key);
+            if (status != null && status != CollectionStatus.UNDISCOVERED) {
+                collectionDao.upsertCrop(key, status);
+            }
+        }
+        for (String decorationType : state.getCollection().getDecorations()) {
+            collectionDao.upsertDecoration(decorationType);
+        }
+        for (CropType legendary : state.getCollection().getLegendaries()) {
+            collectionDao.upsertLegendary(legendary);
+        }
+
+        // P3：套装 collected / active 两个独立状态都必须落库（验收规范 §一百一十八）
+        Set<String> touchedSets = new LinkedHashSet<>();
+        touchedSets.addAll(state.getSetCollection().getCollected());
+        touchedSets.addAll(state.getSetCollection().getActive());
+        for (String setId : touchedSets) {
+            setCollectionDao.upsert(setId,
+                    state.getSetCollection().getCollected().contains(setId),
+                    state.getSetCollection().getActive().contains(setId));
+        }
+
+        // P3：毕业状态（未毕业不写行，读回即"未毕业"）
+        if (state.getGraduation().isGraduated()) {
+            graduationDao.upsert(state.getGraduation());
+        }
     }
 
     /**
@@ -288,6 +339,26 @@ public class SqliteSaveService implements SaveService {
         state.setActiveEvent(new ActiveEventDao(connection).find());
         for (Item item : new PlayerItemDao(connection).load().listItems()) {
             state.getInventory().addItem(item);
+        }
+
+        // P3：收集图鉴 / 套装 / 毕业（永久状态，恢复后 FarmScore 与评价不丢失）
+        CollectionDao collectionDao = new CollectionDao(connection);
+        state.getCollection().getCrops().putAll(collectionDao.findAllCrops());
+        state.getCollection().getDecorations().addAll(collectionDao.findAllDecorations());
+        state.getCollection().getLegendaries().addAll(collectionDao.findAllLegendaries());
+        for (SetCollectionDao.SetRow row : new SetCollectionDao(connection).findAll()) {
+            if (row.collected()) {
+                state.getSetCollection().getCollected().add(row.setId());
+            }
+            if (row.active()) {
+                state.getSetCollection().getActive().add(row.setId());
+            }
+        }
+        GraduationState graduation = new GraduationDao(connection).find();
+        if (graduation != null) {
+            state.getGraduation().setGraduated(graduation.isGraduated());
+            state.getGraduation().setGraduationWorldTime(graduation.getGraduationWorldTime());
+            state.getGraduation().setGraduationGameDay(graduation.getGraduationGameDay());
         }
 
         warnOnMapSizeMismatch(new FarmDao(connection).findMapSize());

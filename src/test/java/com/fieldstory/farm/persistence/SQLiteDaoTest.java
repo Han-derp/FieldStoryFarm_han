@@ -5,6 +5,7 @@ import com.fieldstory.farm.model.DecorationState;
 import com.fieldstory.farm.model.GameState;
 import com.fieldstory.farm.model.Player;
 import com.fieldstory.farm.model.PlotState;
+import com.fieldstory.farm.model.WeatherType;
 import com.fieldstory.farm.persistence.dao.CropDao;
 import com.fieldstory.farm.persistence.dao.DecorationDao;
 import com.fieldstory.farm.persistence.dao.FarmDao;
@@ -329,13 +330,13 @@ class SQLiteDaoTest {
         SqliteSaveService service = new SqliteSaveService(new DatabaseService(dbFile));
 
         GameState state = new GameState(new Player("农夫", 500), 7L);
-        state.setCurrentWeather("GREEN_RAIN");
+        state.setCurrentWeather(WeatherType.GREEN_RAIN);
         service.save(state);
 
         SqliteSaveService reopened = new SqliteSaveService(new DatabaseService(dbFile));
         GameState loaded = reopened.load();
         assertNotNull(loaded);
-        assertEquals("GREEN_RAIN", loaded.getCurrentWeather(),
+        assertEquals(WeatherType.GREEN_RAIN, loaded.getCurrentWeather(),
                 "current_weather 应随存档还原（验收 §七十三）");
         assertEquals(7L, loaded.getGameDay(),
                 "current_day_index 应随存档还原（验收 §七十三）");
