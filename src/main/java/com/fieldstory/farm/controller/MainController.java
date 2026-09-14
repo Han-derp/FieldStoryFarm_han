@@ -134,12 +134,12 @@ public class MainController {
         restoreGameDay(state, model);
 
         // E 存档前统一回填运行态。
-        // GameState.gameDay 是从 0 起的已结算天数（新档 = 0），而 GameClock.getGameDay() 从第 1 天起，
-        // 两者相差 1；此处必须减 1，与「读取存档」的还原口径（见 restoreGameDay）保持一致，
-        // 否则新档会被写成第 1 天，且玩过 N 天后重开会退回一天。
+        // 口径统一（转交卡裁决）：存档 gameDay 直接取 GameClock.getGameDay()（第 1 天起），
+        // 与 D 文档「第 1 天 06:00」、状态栏「第 X 天」、决策 D14 世界时间公式一致；
+        // 读档还原口径见 restoreGameDay。
         gameManager.setBeforeSaveHook(() -> {
             FarmStateAdapter.capture(state, farm);
-            state.setGameDay(model.getGameClock().getGameDay() - 1L);
+            state.setGameDay(model.getGameClock().getGameDay());
         });
 
         // B P0 经济入口保持唯一 Player。
@@ -208,14 +208,14 @@ public class MainController {
     /**
      * 读档还原游戏天数；P1 仍按该日 06:00 恢复。
      *
-     * <p>{@link GameState#getGameDay()} 为从 0 起的已结算天数（新档 = 0）：第 d 天（d 从 1 起）对应
-     * {@code gameDay = d - 1}，恢复成该日 06:00 的时钟总分钟数 {@code gameDay * MINUTES_PER_DAY + DAY_START}。
-     * 新档 {@code gameDay = 0} 时保持时钟初值（第 1 天 06:00）。
+     * <p>{@link GameState#getGameDay()} 与 {@code GameClock.getGameDay()} 同口径（第 1 天起）：
+     * 第 d 天恢复成该日 06:00 的时钟总分钟数 {@code (d - 1) * MINUTES_PER_DAY + DAY_START}。
+     * {@code gameDay <= 0}（空档/时钟未接入的旧档）时保持时钟初值（第 1 天 06:00）。
      */
     private static void restoreGameDay(GameState state, FarmGameModel model) {
         long savedDay = state.getGameDay();
         if (savedDay > 0) {
-            int totalMinutes = (int) (savedDay * GameConstants.MINUTES_PER_DAY
+            int totalMinutes = (int) ((savedDay - 1) * GameConstants.MINUTES_PER_DAY
                     + GameConstants.DAY_START);
             model.restoreWorldTime(totalMinutes);
         }
