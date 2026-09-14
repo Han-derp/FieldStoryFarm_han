@@ -34,7 +34,8 @@ import java.util.function.Consumer;
  * 隐藏式操作菜单并自动避让地图边界（UI规范 §12）。
  *
  * <p>纯静态函数 {@link #tileColorFor} / {@link #cropBlockSizeFor} /
- * {@link #tooltipTextFor} 只返回颜色/尺寸/字符串，不创建 JavaFX 节点，
+ * {@link #cropFrameIndexFor} / {@link #tooltipTextFor} 只返回颜色/尺寸/帧号/字符串，
+ * 不创建 JavaFX 节点，
  * 可在无 GUI 线程下单测（任务约束：JavaFX 节点创建不放纯函数里）。
  * 颜色常量用 {@link Color#rgb} 数值构造，同样不依赖 GUI 线程。
  */
@@ -250,6 +251,39 @@ public class FarmView extends Pane {
             case WITHERED:
             default:
                 return 0;
+        }
+    }
+
+    /**
+     * 纯函数：P1 作物贴图帧索引（UI规范 §7 Tile 组合策略：作物层图集帧
+     * 与生长阶段组合）。
+     *
+     * <p>帧映射：SEED→0、SPROUT→2、GROWING→4、MATURE→totalFrames-1
+     * （末帧）；null 或 WITHERED 不显示贴图返回 -1（决策 D3）。
+     * 帧数不足时钳制到 totalFrames-1；totalFrames&lt;=0 视为无图集返回 -1。
+     *
+     * @param stage       作物成长阶段（可为 null）
+     * @param totalFrames 图集总帧数（横向排列）
+     * @return 帧索引；不显示贴图时为 -1
+     */
+    public static int cropFrameIndexFor(GrowthStage stage, int totalFrames) {
+        if (stage == null || stage == GrowthStage.WITHERED) {
+            return -1;
+        }
+        if (totalFrames <= 0) {
+            return -1;
+        }
+        int lastFrame = totalFrames - 1;
+        switch (stage) {
+            case SEED:
+                return Math.min(0, lastFrame);
+            case SPROUT:
+                return Math.min(2, lastFrame);
+            case GROWING:
+                return Math.min(4, lastFrame);
+            case MATURE:
+            default:
+                return lastFrame;
         }
     }
 

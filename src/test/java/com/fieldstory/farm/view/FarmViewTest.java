@@ -117,6 +117,55 @@ class FarmViewTest {
         assertEquals(24, FarmView.cropBlockSizeFor(GrowthStage.GROWING));
     }
 
+    // ==================== cropFrameIndexFor：帧映射（UI规范 §7 生长阶段组合策略） ====================
+
+    @Test
+    void cropFrameIndexForSeedIsFirstFrame() {
+        assertEquals(0, FarmView.cropFrameIndexFor(GrowthStage.SEED, 8));
+    }
+
+    @Test
+    void cropFrameIndexForSproutIsFrame2() {
+        assertEquals(2, FarmView.cropFrameIndexFor(GrowthStage.SPROUT, 8));
+    }
+
+    @Test
+    void cropFrameIndexForGrowingIsFrame4() {
+        assertEquals(4, FarmView.cropFrameIndexFor(GrowthStage.GROWING, 8));
+    }
+
+    @Test
+    void cropFrameIndexForMatureIsLastFrame() {
+        assertEquals(7, FarmView.cropFrameIndexFor(GrowthStage.MATURE, 8));
+    }
+
+    /** P1：WITHERED 不显示贴图（决策 D3），返回 -1 沿用整格枯萎色。 */
+    @Test
+    void cropFrameIndexForWitheredReturnsMinusOne() {
+        assertEquals(-1, FarmView.cropFrameIndexFor(GrowthStage.WITHERED, 8));
+    }
+
+    /** 坏数据兜底：growth_stage 可能被适配层降级为 null，不得抛 NPE。 */
+    @Test
+    void cropFrameIndexForNullStageReturnsMinusOne() {
+        assertEquals(-1, FarmView.cropFrameIndexFor(null, 8));
+    }
+
+    /** 帧数不足：SPROUT/GROWING 所需帧号超出末帧时钳制到 totalFrames-1。 */
+    @Test
+    void cropFrameIndexClampsToLastFrameWhenTotalFramesIsSmall() {
+        assertEquals(2, FarmView.cropFrameIndexFor(GrowthStage.SPROUT, 3));
+        assertEquals(2, FarmView.cropFrameIndexFor(GrowthStage.GROWING, 3));
+        assertEquals(2, FarmView.cropFrameIndexFor(GrowthStage.MATURE, 3));
+    }
+
+    /** totalFrames<=0 视为无图集，返回 -1（不显示贴图）。 */
+    @Test
+    void cropFrameIndexForZeroFramesReturnsMinusOne() {
+        assertEquals(-1, FarmView.cropFrameIndexFor(GrowthStage.GROWING, 0));
+        assertEquals(-1, FarmView.cropFrameIndexFor(GrowthStage.MATURE, -1));
+    }
+
     // ==================== tooltipTextFor：五种文案（UI规范 §10） ====================
 
     @Test
