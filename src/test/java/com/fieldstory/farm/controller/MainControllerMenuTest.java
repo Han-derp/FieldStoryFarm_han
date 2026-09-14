@@ -202,7 +202,7 @@ class MainControllerMenuTest {
         assertEquals(LEGACY_GAME_DAY, state.getGameDay(), "读档应还原存档游戏天数");
     }
 
-    /** 有档时点「开始新游戏」：无视旧档，回到金币 500 的新档与起始种子。 */
+    /** 有档时点「开始新游戏」：无视旧档，回到金币 500、种子库存全 0 的正式新档。 */
     @Test
     void newGameIgnoresExistingSave() throws InterruptedException {
         Path db = tempDir.resolve("menu-new.db");
@@ -219,9 +219,20 @@ class MainControllerMenuTest {
         });
 
         assertNotEquals(LEGACY_GOLD, state.getPlayer().getGold(), "新游戏不应沿用旧档金币");
+        assertEquals(500, state.getPlayer().getGold(), "新游戏初始金币必须保持 500");
         assertEquals(0L, state.getGameDay(), "新游戏应回到第 0 天（尚未结算）");
-        assertEquals(3, state.getPlayer().getSeedInventory().get(CropType.WHEAT),
-                "新游戏应赠送每样 3 颗起始种子");
+        for (CropType type : CropType.values()) {
+            assertEquals(0, state.getPlayer().getSeedInventory().get(type),
+                    "新游戏种子库存应从 0 开始：" + type);
+        }
+
+        // MainController 在完成新游戏装配后应立即建立正式 SQLite 存档。
+        GameManager restarted = new GameManager(
+                new SqliteSaveService(new DatabaseService(db), null));
+        assertTrue(restarted.hasSavedGame(), "开始新游戏后应立即存在可读取存档");
+        GameState reloaded = restarted.start();
+        assertEquals(500, reloaded.getPlayer().getGold(), "重启读档后金币仍应为 500");
+        assertEquals(0L, reloaded.getGameDay(), "重启读档后仍应为第 0 天");
     }
 
     /** 加载主菜单 FXML，并把控制器工厂指向注入内存存档的控制器（不碰真实 data/farm.db）。 */
