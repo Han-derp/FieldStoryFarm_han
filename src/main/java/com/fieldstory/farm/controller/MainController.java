@@ -3,7 +3,6 @@ package com.fieldstory.farm.controller;
 import com.fieldstory.farm.manager.GameManager;
 import com.fieldstory.farm.manager.SceneManager;
 import com.fieldstory.farm.model.Crop;
-import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.Farm;
 import com.fieldstory.farm.model.FarmGameModel;
 import com.fieldstory.farm.model.GameState;
@@ -13,42 +12,46 @@ import com.fieldstory.farm.model.Soil;
 import com.fieldstory.farm.model.WeatherType;
 import com.fieldstory.farm.model.impl.BasicFarm;
 import com.fieldstory.farm.persistence.FarmStateAdapter;
+import com.fieldstory.farm.service.BuffService;
+import com.fieldstory.farm.service.DecorationService;
 import com.fieldstory.farm.service.GrowthService;
 import com.fieldstory.farm.service.HarvestService;
 import com.fieldstory.farm.service.LandService;
 import com.fieldstory.farm.service.PlantingService;
+import com.fieldstory.farm.service.ShopService;
 import com.fieldstory.farm.service.WateringService;
 import com.fieldstory.farm.service.WitherService;
 import com.fieldstory.farm.service.economy.EconomyService;
 import com.fieldstory.farm.service.economy.impl.EconomyServiceImpl;
+import com.fieldstory.farm.service.impl.BasicBuffService;
+import com.fieldstory.farm.service.impl.BasicDecorationService;
 import com.fieldstory.farm.service.impl.BasicGrowthService;
 import com.fieldstory.farm.service.impl.BasicHarvestService;
 import com.fieldstory.farm.service.impl.BasicLandService;
 import com.fieldstory.farm.service.impl.BasicPlantingService;
+import com.fieldstory.farm.service.impl.BasicShopService;
 import com.fieldstory.farm.service.impl.BasicWateringService;
 import com.fieldstory.farm.service.impl.BasicWitherService;
 import com.fieldstory.farm.util.GameConstants;
 import com.fieldstory.farm.util.RandomProvider;
-import com.fieldstory.farm.view.SeedQuickBuyView;
+import com.fieldstory.farm.view.BusinessToolbarView;
+import com.fieldstory.farm.view.DecorationOverlayView;
+import com.fieldstory.farm.view.FarmView;
 import com.fieldstory.farm.view.StatusView;
-import javafx.animation.KeyFrame;
-import javafx.animation.Timeline;
 import javafx.fxml.FXML;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
-import javafx.util.Duration;
 
 /**
  * 主界面控制器（E 场景组装：开始按钮装配 A/B/C/D 各模块，构成可玩最小闭环）。
  *
- * <p>装配职责：主菜单点「开始新游戏」或「读取存档」后创建农场模型与各模块 Service，
- * 把农场视图挂到 CENTER、状态栏挂到 TOP、商店面板挂到 RIGHT，并启动主循环；
- * 跨天时由 {@link FarmController} 回调本类推进作物成长。
- *
- * <p>装配过程中的异常一律向上抛出（不吞掉），以便启动日志可见。
+ * <p>本类只负责装配与调度：
+ * A 提供农场/成长/浇水等能力，B 提供经济/商店/装饰/Buff，
+ * C 提供收获，D 提供时间/天气，E 负责场景与存档。
  */
 public class MainController {
 
@@ -58,7 +61,7 @@ public class MainController {
     /** 全局唯一游戏管理器（单例） */
     private final GameManager gameManager;
 
-    /** 顶栏常驻提示标签（开局后主菜单被替换，承接「进度已保存」等反馈） */
+    /** 顶栏常驻提示标签（开局后主菜单被替换，承接保存/装饰操作反馈） */
     private Label topHintLabel;
 
     /** FXML 默认构造：使用全局唯一 {@link GameManager} 单例。 */
@@ -66,30 +69,23 @@ public class MainController {
         this(GameManager.getInstance());
     }
 
-    /**
-     * 允许注入 {@link GameManager}（单测用，避免触碰真实 SQLite 存档）。
-     *
-     * @param gameManager 游戏管理器
-     */
+    /** 允许注入 GameManager（单测用，避免触碰真实 SQLite 存档）。 */
     MainController(GameManager gameManager) {
         this.gameManager = gameManager;
     }
 
-    /** 本次会话是否已完成装配（防止重复点击“开始游戏”重复装配） */
+    /** 本次会话是否已完成装配（防止重复点击重复装配）。 */
     private boolean assembled = false;
 
-    /** 上次记录的游戏日（跨天成长推进基准；-1 表示尚未初始化） */
+    /** 上次记录的游戏日（跨天成长推进基准；-1 表示尚未初始化）。 */
     private int lastGrowthDay = -1;
-
-    /** 商店面板刷新 Timeline 强引用（防 GC 停止） */
-    private Timeline shopRefreshTimeline;
 
     @FXML
     private void initialize() {
         welcomeText.setText("欢迎来到田野故事农场！");
     }
 
-    /** 开始新游戏：无视历史存档，从第 1 天（金币 500）重新开局。 */
+    /** 开始新游戏：无视历史存档，从新档开始。 */
     @FXML
     protected void onNewGameButtonClick() {
         if (rejectIfRunning()) {
@@ -98,7 +94,7 @@ public class MainController {
         assembleGame(true);
     }
 
-    /** 读取存档：从数据库恢复上次退出瞬间的进度；无存档时只提示，不进入游戏。 */
+    /** 读取存档：从数据库恢复上次退出瞬间的进度；无存档时只提示。 */
     @FXML
     protected void onLoadButtonClick() {
         if (rejectIfRunning()) {
@@ -111,7 +107,7 @@ public class MainController {
         assembleGame(false);
     }
 
-    /** 开局按钮守卫：已在游戏中则提示并返回 {@code true}，避免重复装配。 */
+    /** 已在游戏中则提示并返回 true，避免重复装配。 */
     private boolean rejectIfRunning() {
         if (assembled) {
             setStatusMessage("游戏已在运行中。");
@@ -121,165 +117,153 @@ public class MainController {
     }
 
     /**
-     * 装配游戏最小闭环（农场可玩）。
+     * 装配游戏闭环。
      *
-     * @param newGame {@code true} 开始新游戏（强制新档）；{@code false} 读取存档
+     * @param newGame true=强制新档；false=读取存档
      */
     private void assembleGame(boolean newGame) {
-        // b. 取会话状态：新游戏强制新档（金币 500）；读取存档恢复退出瞬间状态
         GameState state = newGame ? gameManager.startNewGame() : gameManager.start();
         Player player = state.getPlayer();
 
-        // c. 农场模型（12×12，中心 8×8 为可种植区）
         Farm farm = new BasicFarm();
         FarmGameModel model = new FarmGameModel();
         model.setFarm(farm);
 
-        // c1. 读档还原：把数据库中的地块/作物快照覆盖到新农场；无存档时 plots 为空，
-        //     农场保持初始 EMPTY（不再出现"作物/地块读不回来"的空档）。
+        // 恢复 A 的土地/作物快照与 D 的游戏日。
         FarmStateAdapter.restore(state, farm);
         restoreGameDay(state, model);
-        restoreWeather(state, model);
 
-        // c2. 注册存档前回填：手动保存与退出自动保存落盘前，把运行中农场（地块/作物）
-        //     与当前游戏天数、当前天气同步回 GameState，保证下次进入能恢复到退出瞬间。
+        // E 存档前统一回填运行态。
+        // GameState.gameDay 是从 0 起的已结算天数（新档 = 0），而 GameClock.getGameDay() 从第 1 天起，
+        // 两者相差 1；此处必须减 1，与「读取存档」的还原口径（见 restoreGameDay）保持一致，
+        // 否则新档会被写成第 1 天，且玩过 N 天后重开会退回一天。
         gameManager.setBeforeSaveHook(() -> {
             FarmStateAdapter.capture(state, farm);
-            state.setGameDay(model.getGameClock().getGameDay());
-            captureWeather(state, model);
+            state.setGameDay(model.getGameClock().getGameDay() - 1L);
         });
 
-        // d. 经济服务 + 新档赠送起始种子（每样 3 颗、扣金币）。
-        //    只在「开始新游戏」时赠送：读档的种子库存必须严格以存档为准，
-        //    否则"种子用光后读档"会被当成空库存而白送。
+        // B P0 经济入口保持唯一 Player。
+        // 新游戏严格保持 Player/GameManager 的正式初始状态：500 金币、三种种子库存均为 0。
+        // 不得用 buySeed() “赠送”起始种子，否则会真实扣款 135 金币，导致 500 -> 365。
         EconomyService economy = new EconomyServiceImpl(player);
-        if (newGame) {
-            economy.buySeed(CropType.WHEAT, 3);
-            economy.buySeed(CropType.CORN, 3);
-            economy.buySeed(CropType.CARROT, 3);
-        }
 
-        // e. A/B 各模块服务：开垦 / 播种 / 浇水 / 成长 / 枯萎
+        // A/C/D 已有服务保持当前主干实现。
         LandService land = new BasicLandService(economy);
         PlantingService planting = new BasicPlantingService(economy, model.getGameClock());
         WateringService watering = new BasicWateringService();
         GrowthService growth = new BasicGrowthService(watering);
         HarvestService harvest = new BasicHarvestService(economy, land);
-        // P1 枯萎服务：跨天回调记录当日天气并判定枯萎（A 模块 P1 设计文档 §8.2）
         WitherService wither = new BasicWitherService();
 
-        // f. 农场视图挂到场景中央（CENTER）
+        // A 的 FarmView 不改；B 装饰通过透明覆盖层扩展 CENTER。
         FarmViewController farmViewController = new FarmViewController(
                 farm, land, planting, watering, harvest, model.getGameClock());
-        farmViewController.mountToScene();
+        FarmView farmView = farmViewController.getView();
 
-        // f2. B 模块商店视图挂到场景右侧（RIGHT）——《接口约定-场景合并》§1：RIGHT = B 商店
-        SeedQuickBuyView shopView = mountShopPanel(economy);
+        // B P1：装饰状态直接绑定当前 GameState；E 的 SqliteSaveService 负责最终落盘。
+        DecorationService decorationService = new BasicDecorationService(farm, state);
+        BuffService buffService = new BasicBuffService(decorationService);
+        ShopService shopService = new BasicShopService(economy, decorationService);
 
-        // g. 状态栏挂到场景顶部（TOP）
+        DecorationController decorationController =
+                new DecorationController(decorationService, buffService);
+        ShopController shopController = new ShopController(shopService);
+
+        DecorationOverlayView decorationOverlay =
+                new DecorationOverlayView(farm, farmView, decorationController);
+        decorationOverlay.setMessageSink(this::setStatusMessage);
+        SceneManager.getInstance().mount(SceneManager.Slot.CENTER, decorationOverlay);
+
+        // 购买/放置/移动/收回成功后自动保存；B 不直接写 SQL。
+        shopController.addOnPurchaseSucceeded(gameManager::saveNow);
+        decorationController.addOnChanged(gameManager::saveNow);
+
+        BusinessToolbarView businessToolbar = new BusinessToolbarView(
+                shopController, decorationController, decorationOverlay);
+
+        // D 状态栏保持原实现；B 经营入口作为独立节点由 E 装配。
         StatusView statusView = new StatusView(model, player);
-        buildTopBar(statusView);
+        buildTopBar(statusView, businessToolbar);
 
-        // h. 主循环：每秒推进 10 分钟；跨天回调协调作物成长
+        // 主循环：沿用当前主干的天气 + 枯萎 + 成长流程。
         lastGrowthDay = model.getGameClock().getGameDay();
         FarmController farmLoop = new FarmController(model, statusView);
         farmLoop.setOnDayChanged(() -> applyDailyGrowth(
                 farm, growth, wither, farmViewController, model));
+
+        // “开始新游戏”完成装配后立即建立正式存档。
+        // GameManager.startNewGame() 本身只创建内存状态；若依赖窗口正常关闭才保存，
+        // 在 IDE 直接 Stop、异常退出等情况下，下一次“读取存档”会找不到这局。
+        // 此处保存时 beforeSaveHook 已注册，会把初始 Farm + 第 0 天一起写入 SQLite。
+        if (newGame) {
+            gameManager.saveNow();
+        }
+
         farmLoop.startGameLoop();
 
-        // h2. 商店面板随主循环刷新：收获入账（金币）与播种消耗（种子）1 秒内可见
-        startShopRefresh(shopView);
-
-        // i. 装配完成
         assembled = true;
-        welcomeText.setText("点击农田开始：开垦 → 播种 → 浇水 → 等待成长。");
+        setStatusMessage("点击农田开始：开垦 → 播种 → 浇水 → 等待成长。");
     }
 
     /**
-     * 读档还原游戏天数到时钟（验收规范 §41「setTotalMinutes 存档恢复」）。
+     * 读档还原游戏天数；P1 仍按该日 06:00 恢复。
      *
-     * <p>无有效天数（新档 gameDay = 0）时保持时钟初值（第 1 天 06:00）；
-     * P1 不持久化当天时刻，恢复后按当日 06:00 起算（离线模拟与时刻恢复属 P2）。
+     * <p>{@link GameState#getGameDay()} 为从 0 起的已结算天数（新档 = 0）：第 d 天（d 从 1 起）对应
+     * {@code gameDay = d - 1}，恢复成该日 06:00 的时钟总分钟数 {@code gameDay * MINUTES_PER_DAY + DAY_START}。
+     * 新档 {@code gameDay = 0} 时保持时钟初值（第 1 天 06:00）。
      */
     private static void restoreGameDay(GameState state, FarmGameModel model) {
         long savedDay = state.getGameDay();
         if (savedDay > 0) {
-            int totalMinutes = (int) ((savedDay - 1) * GameConstants.MINUTES_PER_DAY
+            int totalMinutes = (int) (savedDay * GameConstants.MINUTES_PER_DAY
                     + GameConstants.DAY_START);
             model.restoreWorldTime(totalMinutes);
         }
     }
 
     /**
-     * 读档还原天气到模型（验收规范 §七十三 {@code world_state.current_weather}）。
-     *
-     * <p>把存档中的天气枚举名与天气日索引还原到 {@link FarmGameModel} 的天气状态；
-     * 无天气记录（新档/旧档）时保持默认晴天（D 模块 P1 文档 §4.1）。
+     * 跨天：滚动天气 → 记录天气并判定枯萎 → 推进幸存作物成长 → 刷新农场。
      */
-    private static void restoreWeather(GameState state, FarmGameModel model) {
-        String weatherName = state.getCurrentWeather();
-        if (weatherName == null || weatherName.isBlank()) {
-            return;
-        }
-        model.restoreWeather(weatherName, (int) state.getGameDay());
-    }
-
-    /**
-     * 存档前回填天气：把运行中模型的当前天气枚举名写回 {@link GameState}，
-     * 供 E 模块落库到 {@code world_state.current_weather}（验收规范 §七十三）。
-     *
-     * <p>天气日索引与游戏天数同源（天气按当前游戏日生成，D 模块 P1 文档 §4.2），
-     * 故 {@code current_day_index} 由 {@code state.gameDay} 承载，无需另存。
-     */
-    private static void captureWeather(GameState state, FarmGameModel model) {
-        WeatherType type = model.getWeatherState().getWeatherType();
-        state.setCurrentWeather(type == null ? null : type.name());
-    }
-
-    /**
-     * 跨天回调：滚动当日天气 → 关闭过期事件 → 抽取当天事件（验收规范 §八十九 ⑧/⑬）
-     * → 对已播种作物记录天气并判定枯萎（A 模块 P1 设计文档 §8.2）
-     * → 按经过天数推进幸存作物成长（带天气倍率，验收规范 §四十九）→ 刷新农场视图。
-     *
-     * <p>枯萎接线顺序不可打乱：先 {@code recordDailyWeather} 再 {@code judgeWither}；
-     * 已枯萎作物由 {@code applyGrowth} 的 WITHERED 守卫跳过（A 模块设计文档 §6.3）。
-     * worldTime 按 day×24+hour 计算（决策 D14，GameClock 不提供 getWorldTime）。
-     *
-     * <p>事件接线（D 模块 P2，验收规范 §八十九 ⑧/⑬）：先 {@code expireIfNeeded} 关闭
-     * 已到期事件，再 {@code rollDailyEvent} 抽取当天事件（每日最多 1 个，一次抽取）。
-     * D 只提供规则，跨日调用由本装配层协调（D 模块 P2 跨模块接口约定文档 §六 矛盾 2）。
-     */
-    private void applyDailyGrowth(Farm farm, GrowthService growth, WitherService wither,
-                                  FarmViewController farmViewController, FarmGameModel model) {
+    private void applyDailyGrowth(Farm farm,
+                                  GrowthService growth,
+                                  WitherService wither,
+                                  FarmViewController farmViewController,
+                                  FarmGameModel model) {
         int currentDay = model.getGameClock().getGameDay();
         double elapsedDays = currentDay - lastGrowthDay;
+
         if (elapsedDays > 0) {
             WeatherType today = model.getWeatherService().rollDailyWeather(currentDay);
             double weatherRate = model.getWeatherService().getGrowthRate(today);
             long worldTime = currentDay * 24L + model.getGameClock().getGameHour();
-            // ⑧ 关闭过期事件 → ⑬ 抽取当天事件（每日最多 1 个，一次抽取）
-            model.getEventService().expireIfNeeded(worldTime);
-            model.getEventService().rollDailyEvent(currentDay);
+
             for (Soil soil : farm.getSoils()) {
                 Crop crop = soil.getCrop();
-                if (crop != null) {
-                    wither.recordDailyWeather(crop, today, currentDay, worldTime);
-                    wither.judgeWither(crop, today, currentDay,
-                            BasicWitherService.WITHER_MITIGATION_P1,
-                            RandomProvider.nextDouble());
-                    if (crop.getGrowthStage() != GrowthStage.MATURE
-                            && crop.getGrowthStage() != GrowthStage.WITHERED) {
-                        growth.applyGrowth(crop, elapsedDays, weatherRate);
-                    }
+                if (crop == null) {
+                    continue;
+                }
+
+                wither.recordDailyWeather(crop, today, currentDay, worldTime);
+                wither.judgeWither(
+                        crop,
+                        today,
+                        currentDay,
+                        BasicWitherService.WITHER_MITIGATION_P1,
+                        RandomProvider.nextDouble());
+
+                if (crop.getGrowthStage() != GrowthStage.MATURE
+                        && crop.getGrowthStage() != GrowthStage.WITHERED) {
+                    growth.applyGrowth(crop, elapsedDays, weatherRate);
                 }
             }
         }
+
         lastGrowthDay = currentDay;
         farmViewController.getView().setCurrentGameDay(currentDay);
         farmViewController.getView().refreshAll();
     }
 
-    /** 手动存档入口：保存当前进度（退出/刷新时另有自动存档兜底）。 */
+    /** 手动存档入口。 */
     @FXML
     protected void onSaveButtonClick() {
         try {
@@ -290,60 +274,32 @@ public class MainController {
         }
     }
 
-    /**
-     * 把 B 模块的种子快捷购买面板挂到场景右侧（RIGHT）。
-     *
-     * <p>《接口约定-场景合并》§1 约定 RIGHT 归 B 商店 / 玩家 UI；B 已交付
-     * {@link SeedQuickBuyView}（P0 快捷购买面板），由装配层（E）在开局时挂载，
-     * 模块自身不 {@code new Scene / Stage}（B 模块文档 §21）。
-     *
-     * <p>抽为独立方法便于单测「开局后商店面板已挂到 RIGHT」，
-     * 且不触发主循环与真实落盘。
-     *
-     * @param economy 经济服务（金币 / 种子唯一入口）
-     * @return 已挂载的商店面板
-     */
-    SeedQuickBuyView mountShopPanel(EconomyService economy) {
-        SeedQuickBuyController shopController = new SeedQuickBuyController(economy);
-        SeedQuickBuyView shopView = new SeedQuickBuyView(shopController);
-        SceneManager.getInstance().mount(SceneManager.Slot.RIGHT, shopView);
-        return shopView;
-    }
-
-    /**
-     * 每秒刷新商店面板：收获入账的金币与播种消耗的种子随主循环回写面板标签。
-     *
-     * <p>独立于 D 模块的 {@link FarmController} 主循环，避免改动 D 的文件；
-     * 只读取经济服务状态，不推进时间、不写业务。
-     */
-    private void startShopRefresh(SeedQuickBuyView shopView) {
-        shopRefreshTimeline = new Timeline(
-                new KeyFrame(Duration.seconds(1), event -> shopView.refresh()));
-        shopRefreshTimeline.setCycleCount(Timeline.INDEFINITE);
-        shopRefreshTimeline.play();
-    }
-
-    /**
-     * 构建常驻顶栏：状态栏 + 手动存档按钮 + 反馈标签，并挂到 TOP 槽位。
-     *
-     * <p>开局后农场视图会替换 CENTER 的主菜单，手动存档入口必须放在常驻的 TOP，
-     * 否则 main-view.fxml 的「保存进度」按钮开局后不可达（PAUSED 亦无 UI 入口）。
-     *
-     * <p>抽为独立方法便于单测「开局后存档入口仍可达」，且不触发主循环与真实落盘。
-     *
-     * @param statusView 状态栏视图
-     */
+    /** 兼容既有测试/调用：仅状态栏 + 保存入口。 */
     void buildTopBar(StatusView statusView) {
+        buildTopBar(statusView, null);
+    }
+
+    /**
+     * 构建常驻顶栏：D 状态栏 + B 经营入口 + E 保存按钮 + 提示。
+     */
+    void buildTopBar(StatusView statusView, Node businessToolbar) {
         Button saveButton = new Button("保存进度");
         saveButton.setOnAction(event -> onSaveButtonClick());
+
         topHintLabel = new Label();
-        HBox topBar = new HBox(16, statusView, saveButton, topHintLabel);
+        HBox topBar = new HBox(16);
+        topBar.getChildren().add(statusView);
+        if (businessToolbar != null) {
+            topBar.getChildren().add(businessToolbar);
+        }
+        topBar.getChildren().addAll(saveButton, topHintLabel);
         topBar.setAlignment(Pos.CENTER_LEFT);
         topBar.setPadding(new Insets(6, 12, 6, 12));
+
         SceneManager.getInstance().mount(SceneManager.Slot.TOP, topBar);
     }
 
-    /** 统一提示输出：主菜单可见时写欢迎语，开局后写到顶栏常驻标签，保证反馈始终可见。 */
+    /** 统一提示输出，主菜单与开局后的常驻顶栏都可见。 */
     private void setStatusMessage(String message) {
         if (welcomeText != null) {
             welcomeText.setText(message);
