@@ -4,10 +4,12 @@ import com.fieldstory.farm.manager.GameManager;
 import com.fieldstory.farm.model.Crop;
 import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.Farm;
+import com.fieldstory.farm.model.FarmGameModel;
 import com.fieldstory.farm.model.GameState;
 import com.fieldstory.farm.model.GrowthStage;
 import com.fieldstory.farm.model.Soil;
 import com.fieldstory.farm.model.SoilState;
+import com.fieldstory.farm.model.WeatherType;
 import com.fieldstory.farm.model.impl.BasicCrop;
 import com.fieldstory.farm.model.impl.BasicFarm;
 import com.fieldstory.farm.model.impl.BasicGameClock;
@@ -151,5 +153,40 @@ class FarmPersistenceIntegrationTest {
 
         // 种子库存（B 模块）也随存档恢复：买 2 颗、播种消耗 1 颗
         assertEquals(1, loaded.getPlayer().getSeedInventory().get(CropType.CARROT));
+    }
+
+    /**
+     * 天气随存档往返（验收规范 §七十三 {@code world_state.current_weather}）：
+     * 按 {@code MainController} 的装配方式，落盘前把运行中模型的天气写回 {@link GameState}，
+     * 重启后读回并还原到新的 {@link FarmGameModel}，天气枚举与日索引应无损。
+     */
+    @Test
+    void weatherSurvivesExitAndRestart() {
+        GameManager manager = managerOn("weather.db");
+        GameState state = manager.start();
+
+        FarmGameModel model = new FarmGameModel();
+        model.getWeatherState().setWeatherType(WeatherType.GREEN_RAIN);
+        model.getWeatherState().setDayIndex(6);
+
+        // 装配层注册的回填钩子：落盘前把运行态天气写回 GameState
+        manager.setBeforeSaveHook(() -> {
+            state.setGameDay(model.getGameClock().getGameDay());
+            state.setCurrentWeather(model.getWeatherState().getWeatherType());
+        });
+        manager.saveAndExit();
+
+        // ---------- 重启 ----------
+        GameManager restarted = managerOn("weather.db");
+        GameState loaded = restarted.start();
+        assertEquals(WeatherType.GREEN_RAIN, loaded.getCurrentWeather(),
+                "current_weather 应随存档恢复（验收 §七十三）");
+
+        // 装配层读档还原：把存档天气还原到新模型（天气日索引与游戏天数同源）
+        FarmGameModel reloaded = new FarmGameModel();
+        reloaded.restoreWeather(
+                loaded.getCurrentWeather() == null ? null : loaded.getCurrentWeather().name(),
+                (int) loaded.getGameDay());
+        assertEquals(WeatherType.GREEN_RAIN, reloaded.getWeatherState().getWeatherType());
     }
 }

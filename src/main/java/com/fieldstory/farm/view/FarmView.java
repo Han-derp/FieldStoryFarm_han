@@ -35,8 +35,7 @@ import java.util.function.Consumer;
  * 隐藏式操作菜单并自动避让地图边界（UI规范 §12）。
  *
  * <p>纯静态函数 {@link #tileColorFor} / {@link #cropBlockSizeFor} /
- * {@link #cropFrameIndexFor} / {@link #tooltipTextFor} 只返回颜色/尺寸/帧号/字符串，
- * 不创建 JavaFX 节点，
+ * {@link #tooltipTextFor} 只返回颜色/尺寸/字符串，不创建 JavaFX 节点，
  * 可在无 GUI 线程下单测（任务约束：JavaFX 节点创建不放纯函数里）。
  * 颜色常量用 {@link Color#rgb} 数值构造，同样不依赖 GUI 线程。
  */
@@ -259,39 +258,6 @@ public class FarmView extends Pane {
     }
 
     /**
-     * 纯函数：P1 作物贴图帧索引（UI规范 §7 Tile 组合策略：作物层图集帧
-     * 与生长阶段组合）。
-     *
-     * <p>帧映射：SEED→0、SPROUT→2、GROWING→4、MATURE→totalFrames-1
-     * （末帧）；null 或 WITHERED 不显示贴图返回 -1（决策 D3）。
-     * 帧数不足时钳制到 totalFrames-1；totalFrames&lt;=0 视为无图集返回 -1。
-     *
-     * @param stage       作物成长阶段（可为 null）
-     * @param totalFrames 图集总帧数（横向排列）
-     * @return 帧索引；不显示贴图时为 -1
-     */
-    public static int cropFrameIndexFor(GrowthStage stage, int totalFrames) {
-        if (stage == null || stage == GrowthStage.WITHERED) {
-            return -1;
-        }
-        if (totalFrames <= 0) {
-            return -1;
-        }
-        int lastFrame = totalFrames - 1;
-        switch (stage) {
-            case SEED:
-                return Math.min(0, lastFrame);
-            case SPROUT:
-                return Math.min(2, lastFrame);
-            case GROWING:
-                return Math.min(4, lastFrame);
-            case MATURE:
-            default:
-                return lastFrame;
-        }
-    }
-
-    /**
      * 坏数据兜底：crop_type 无法识别时为 null（存档允许 {@code crop_type=NULL}，
      * P1 设计文档 §3），返回占位名而非抛 NPE。
      *
@@ -305,7 +271,7 @@ public class FarmView extends Pane {
     /**
      * 纯函数：悬停提示文案（UI规范 §10）。
      *
-     * <p>六种文案：null=装饰区（可放置装饰）、EMPTY=未开垦、TILLED=已开垦可播种、
+     * <p>六种文案：null=装饰区可放置装饰、EMPTY=未开垦、TILLED=已开垦可播种、
      * PLANTED=作物名+成长x%+今日已浇/未浇、MATURE=已成熟可收获、
      * WITHERED=已枯萎，请铲除（P1，规则 §16.5）。
      *
@@ -505,11 +471,11 @@ public class FarmView extends Pane {
         selectionRect.setX(soil.getColumn() * TILE_SIZE);
         selectionRect.setY(soil.getRow() * TILE_SIZE);
         selectionRect.setVisible(true);
-        Rectangle tile = tiles[soil.getRow()][soil.getColumn()];
-        if (tile.getScene() != null && tile.getScene().getWindow() != null) {
-            tooltips[soil.getRow()][soil.getColumn()]
-                    .show(tile, TILE_SIZE / 2.0, TILE_SIZE / 2.0);
-        }
+        // 点击会隐藏 Tooltip（JavaFX 默认）；选中后立刻重开，
+        // 鼠标不离开格子也能持续看到状态
+        tooltips[soil.getRow()][soil.getColumn()]
+                .show(tiles[soil.getRow()][soil.getColumn()],
+                        TILE_SIZE / 2.0, TILE_SIZE / 2.0);
     }
 
     /** 注册 FARM_PLOT 格点击回调（装饰区点击传入 null）。 */
@@ -560,11 +526,9 @@ public class FarmView extends Pane {
         int row = soil.getRow();
         int column = soil.getColumn();
         tooltips[row][column].setText(message);
-        Rectangle tile = tiles[row][column];
-        if (tile.getScene() != null && tile.getScene().getWindow() != null) {
-            tooltips[row][column].show(tile, TILE_SIZE / 2.0, TILE_SIZE / 2.0);
-        }
+        tooltips[row][column].show(tiles[row][column], TILE_SIZE / 2.0, TILE_SIZE / 2.0);
     }
+
     // ==================== 按钮（UI规范 §13） ====================
 
     /**

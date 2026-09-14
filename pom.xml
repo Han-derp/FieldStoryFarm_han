@@ -54,6 +54,13 @@
             <version>${slf4j.version}</version>
         </dependency>
 
+        <!-- 显式提供 NOP 日志绑定，避免 slf4j-api 找不到 StaticLoggerBinder 时打印警告 -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-nop</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+
 
 
         <dependency>

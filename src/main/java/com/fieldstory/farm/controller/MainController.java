@@ -4,6 +4,8 @@ import com.fieldstory.farm.manager.GameManager;
 import com.fieldstory.farm.manager.SceneManager;
 import com.fieldstory.farm.model.Crop;
 import com.fieldstory.farm.model.CropMemory;
+import com.fieldstory.farm.model.CropType;
+import com.fieldstory.farm.model.Decoration;
 import com.fieldstory.farm.model.EventState;
 import com.fieldstory.farm.model.Farm;
 import com.fieldstory.farm.model.FarmGameModel;
@@ -19,8 +21,13 @@ import com.fieldstory.farm.persistence.FarmStateAdapter;
 import com.fieldstory.farm.persistence.SaveSlot;
 import com.fieldstory.farm.persistence.SaveSlotInfo;
 import com.fieldstory.farm.service.BuffService;
+import com.fieldstory.farm.service.CollectionService;
 import com.fieldstory.farm.service.DecorationService;
+import com.fieldstory.farm.service.FarmRankService;
+import com.fieldstory.farm.service.FarmScoreService;
+import com.fieldstory.farm.service.GraduationService;
 import com.fieldstory.farm.service.GrowthService;
+import com.fieldstory.farm.service.HarvestOutcome;
 import com.fieldstory.farm.service.HarvestResult;
 import com.fieldstory.farm.service.HarvestService;
 import com.fieldstory.farm.service.HarvestTransactionService;
@@ -29,13 +36,18 @@ import com.fieldstory.farm.service.LegendaryService;
 import com.fieldstory.farm.service.MemoryService;
 import com.fieldstory.farm.service.PlantingService;
 import com.fieldstory.farm.service.QualityService;
+import com.fieldstory.farm.service.SetService;
 import com.fieldstory.farm.service.ShopService;
 import com.fieldstory.farm.service.WateringService;
 import com.fieldstory.farm.service.WitherService;
 import com.fieldstory.farm.service.economy.EconomyService;
 import com.fieldstory.farm.service.economy.impl.EconomyServiceImpl;
 import com.fieldstory.farm.service.impl.BasicBuffService;
+import com.fieldstory.farm.service.impl.BasicCollectionService;
 import com.fieldstory.farm.service.impl.BasicDecorationService;
+import com.fieldstory.farm.service.impl.BasicFarmRankService;
+import com.fieldstory.farm.service.impl.BasicFarmScoreService;
+import com.fieldstory.farm.service.impl.BasicGraduationService;
 import com.fieldstory.farm.service.impl.BasicGrowthService;
 import com.fieldstory.farm.service.impl.BasicHarvestTransactionService;
 import com.fieldstory.farm.service.impl.BasicLandService;
@@ -43,12 +55,14 @@ import com.fieldstory.farm.service.impl.BasicLegendaryService;
 import com.fieldstory.farm.service.impl.BasicMemoryService;
 import com.fieldstory.farm.service.impl.BasicPlantingService;
 import com.fieldstory.farm.service.impl.BasicQualityService;
+import com.fieldstory.farm.service.impl.BasicSetService;
 import com.fieldstory.farm.service.impl.BasicShopService;
 import com.fieldstory.farm.service.impl.BasicWateringService;
 import com.fieldstory.farm.service.impl.BasicWitherService;
 import com.fieldstory.farm.util.GameConstants;
 import com.fieldstory.farm.util.RandomProvider;
 import com.fieldstory.farm.view.BusinessToolbarView;
+import com.fieldstory.farm.view.CollectionPopupView;
 import com.fieldstory.farm.view.DecorationOverlayView;
 import com.fieldstory.farm.view.FarmView;
 import com.fieldstory.farm.view.StatusView;
@@ -113,8 +127,77 @@ public class MainController {
 
     @FXML
     private void initialize() {
-        welcomeText.setText("欢迎来到田野故事农场！");
+        welcomeText.setText("欢迎来到田野故事农场，选一档开始你的故事。");
+        styleMenuButton(newSaveButton, 180, 42);
         buildSlotList();
+    }
+
+    // ==================================================================
+    // 入口界面样式（UI美术设计规范 §13 按钮 / §14 主色表 / §16 组件）
+    // ==================================================================
+
+    /** 按钮 Normal：#A97850（规范 §13「正常」）。 */
+    private static final String BUTTON_NORMAL_STYLE =
+            "-fx-background-color: #A97850;"
+                    + "-fx-background-radius: 10;"
+                    + "-fx-text-fill: #FFF3DD;"
+                    + "-fx-font-size: 16;"
+                    + "-fx-cursor: hand;";
+
+    /** 按钮 Hover / Pressed：#C28B5A（规范 §13「悬停」）。 */
+    private static final String BUTTON_HOVER_STYLE =
+            "-fx-background-color: #C28B5A;"
+                    + "-fx-background-radius: 10;"
+                    + "-fx-text-fill: #FFF3DD;"
+                    + "-fx-font-size: 16;"
+                    + "-fx-cursor: hand;";
+
+    /** 按钮 Disabled：#CCCCCC（规范 §13「禁用」）。 */
+    private static final String BUTTON_DISABLED_STYLE =
+            "-fx-background-color: #CCCCCC;"
+                    + "-fx-background-radius: 10;"
+                    + "-fx-text-fill: #FFF3DD;"
+                    + "-fx-font-size: 16;";
+
+    /** 存档行卡片：比面板略深的米色 + 木色细描边。 */
+    private static final String SLOT_ROW_STYLE =
+            "-fx-background-color: #F7E8C9;"
+                    + "-fx-background-radius: 10;"
+                    + "-fx-border-color: #8B5E3C;"
+                    + "-fx-border-radius: 10;"
+                    + "-fx-border-width: 1;";
+
+    private static final String SLOT_SUMMARY_STYLE =
+            "-fx-text-fill: #493526; -fx-font-size: 14;";
+
+    private static final String EMPTY_HINT_STYLE =
+            "-fx-text-fill: #8B5E3C; -fx-font-size: 14;";
+
+    /**
+     * 统一按钮四态（Normal / Hover / Pressed / Disabled），与 A/B 模块既有实现
+     * （{@code SeedQuickBuyView}、{@code FarmView}）保持一致；禁用态不响应鼠标悬停。
+     */
+    private static void styleMenuButton(Button button, double width, double height) {
+        if (button == null) {
+            return;
+        }
+        button.setPrefSize(width, height);
+        button.setMinSize(width, height);
+        button.setStyle(button.isDisabled() ? BUTTON_DISABLED_STYLE : BUTTON_NORMAL_STYLE);
+        button.setOnMouseEntered(event -> {
+            if (!button.isDisabled()) {
+                button.setStyle(BUTTON_HOVER_STYLE);
+            }
+        });
+        button.setOnMouseExited(event ->
+                button.setStyle(button.isDisabled() ? BUTTON_DISABLED_STYLE : BUTTON_NORMAL_STYLE));
+        button.setOnMousePressed(event -> {
+            if (!button.isDisabled()) {
+                button.setStyle(BUTTON_HOVER_STYLE);
+            }
+        });
+        button.setOnMouseReleased(event ->
+                button.setStyle(button.isDisabled() ? BUTTON_DISABLED_STYLE : BUTTON_NORMAL_STYLE));
     }
 
     // ==================================================================
@@ -129,7 +212,10 @@ public class MainController {
         slotList.getChildren().clear();
         List<SaveSlotInfo> infos = gameManager.allSlotInfos();
         if (infos.isEmpty()) {
-            slotList.getChildren().add(new Label("还没有存档，点击「新建存档」开始游戏。"));
+            Label empty = new Label("还没有存档，点击「新建存档」开启第一段田野故事。");
+            empty.setWrapText(true);
+            empty.setStyle(EMPTY_HINT_STYLE);
+            slotList.getChildren().add(empty);
             return;
         }
         for (SaveSlotInfo info : infos) {
@@ -137,7 +223,7 @@ public class MainController {
         }
     }
 
-    /** 单个存档位行：`存档 N：摘要（存档时间）  [读取] [新游戏]`。 */
+    /** 单个存档位行：`存档 N：摘要（存档时间）  [读取] [新游戏]`（卡片样式）。 */
     private HBox buildSlotRow(SaveSlotInfo info) {
         StringBuilder text = new StringBuilder()
                 .append(info.slot().displayName())
@@ -148,16 +234,21 @@ public class MainController {
         }
         Label summary = new Label(text.toString());
         summary.setMinWidth(260);
+        summary.setStyle(SLOT_SUMMARY_STYLE);
 
         Button loadButton = new Button("读取");
         loadButton.setDisable(!info.occupied());
+        styleMenuButton(loadButton, 88, 34);
         loadButton.setOnAction(event -> onSlotLoad(info.slot()));
 
         Button newGameButton = new Button("新游戏");
+        styleMenuButton(newGameButton, 88, 34);
         newGameButton.setOnAction(event -> onSlotNewGame(info.slot()));
 
         HBox row = new HBox(12, summary, loadButton, newGameButton);
         row.setAlignment(Pos.CENTER_LEFT);
+        row.setPadding(new Insets(8, 12, 8, 12));
+        row.setStyle(SLOT_ROW_STYLE);
         return row;
     }
 
@@ -223,6 +314,11 @@ public class MainController {
         GameState state = newGame ? gameManager.startNewGame(slot) : gameManager.start(slot);
         Player player = state.getPlayer();
 
+        // E P3：收集图鉴 / FarmScore / 毕业——全部绑定当前 GameState，随存档往返（验收规范 §一百三十二）。
+        CollectionService collectionService = new BasicCollectionService(state);
+        FarmScoreService farmScoreService = new BasicFarmScoreService(state);
+        GraduationService graduationService = new BasicGraduationService(state, farmScoreService);
+
         Farm farm = new BasicFarm();
         FarmGameModel model = new FarmGameModel();
         model.setFarm(farm);
@@ -256,6 +352,8 @@ public class MainController {
             state.setWeatherDayIndex(model.getWeatherState().getDayIndex());
             captureMemories(state, memoryService);
             state.setActiveEvent(model.getEventState());
+            // E P3：落盘前评估毕业；此刻时钟/天数刚刷新，毕业时间戳精确，且首次只触发一次（验收规范 §一百二十九）。
+            graduationService.evaluateAndGraduate();
         });
 
         // B P0 经济入口保持唯一 Player。
@@ -269,16 +367,22 @@ public class MainController {
         WateringService watering = new BasicWateringService();
         GrowthService growth = new BasicGrowthService(watering);
         HarvestService harvest = buildHarvestService(
-                economy, land, model, memoryService, inventory);
+                economy, land, model, memoryService, inventory, collectionService, gameManager::saveNow);
         WitherService wither = new BasicWitherService();
 
         // A 的 FarmView 不改；B 装饰通过透明覆盖层扩展 CENTER。
         FarmViewController farmViewController = new FarmViewController(
-                farm, land, planting, watering, harvest, model.getGameClock());
+                farm, land, planting, watering, harvest, model.getGameClock(), economy);
         FarmView farmView = farmViewController.getView();
 
         // B P1：装饰状态直接绑定当前 GameState；E 的 SqliteSaveService 负责最终落盘。
         DecorationService decorationService = new BasicDecorationService(farm, state);
+        // E P3：以当前拥有的装饰回填图鉴（兼容 P3 之前的旧档：拥有即已购买、即已解锁）。
+        syncDecorations(collectionService, decorationService);
+        // E P3：套装 = 全部成员「拥有且放置」；collected 永久、active 随放置实时变化（验收规范 §一百一十八）。
+        // 读档后立即重算一次，使 active 与已恢复的放置状态一致。
+        SetService setService = new BasicSetService(decorationService, state);
+        setService.refresh();
         BuffService buffService = new BasicBuffService(decorationService);
         ShopService shopService = new BasicShopService(economy, decorationService);
 
@@ -293,14 +397,27 @@ public class MainController {
 
         // 购买/放置/移动/收回成功后自动保存；B 不直接写 SQL。
         shopController.addOnPurchaseSucceeded(gameManager::saveNow);
-        decorationController.addOnChanged(gameManager::saveNow);
+        // E P3：放置/移动/收回成功 → 先重算套装 collected/active，再落盘（collected 才计入 FarmScore）。
+        decorationController.addOnChanged(() -> {
+            setService.refresh();
+            gameManager.saveNow();
+        });
+        // E P3：首次成功购买某类型装饰即永久解锁图鉴（去重）；随后 onPurchaseSucceeded 触发落盘。
+        shopController.addOnDecorationPurchased(() -> {
+            syncDecorations(collectionService, decorationService);
+            setService.refresh();
+        });
 
         BusinessToolbarView businessToolbar = new BusinessToolbarView(
                 shopController, decorationController, decorationOverlay);
 
         // D 状态栏保持原实现；B 经营入口作为独立节点由 E 装配。
         StatusView statusView = new StatusView(model, player);
-        buildTopBar(statusView, businessToolbar);
+        // E P3：图鉴入口聚合收集 / FarmScore / FarmRank / 套装四个服务（验收规范 §一百二十七）。
+        FarmRankService farmRankService = new BasicFarmRankService();
+        CollectionController collectionController = new CollectionController(
+                collectionService, farmScoreService, farmRankService, setService);
+        buildTopBar(statusView, businessToolbar, collectionController);
 
         // 主循环：沿用当前主干的天气 + 枯萎 + 成长流程。
         lastGrowthDay = model.getGameClock().getGameDay();
@@ -374,6 +491,21 @@ public class MainController {
     }
 
     /**
+     * E P3：以「当前拥有的装饰类型」回填装饰图鉴，天然去重。
+     *
+     * <p>拥有即代表已成功购买（B 的装饰库存绑定 GameState），因此该同步既服务首次购买即时解锁，
+     * 也用于读档时补齐 P3 之前旧档的图鉴（验收规范 §一百一十三）。
+     */
+    private static void syncDecorations(CollectionService collectionService,
+                                        DecorationService decorationService) {
+        for (Decoration owned : decorationService.getOwnedDecorations()) {
+            if (owned != null && owned.getDecorationType() != null) {
+                collectionService.collectDecoration(owned.getDecorationType().getId());
+            }
+        }
+    }
+
+    /**
      * 装配 P2 完整收获事务（验收规范 §一百零三），并适配为 A 视图依赖的 {@link HarvestService}。
      *
      * <p>为什么需要这层适配：A 的 {@code FarmViewController} 只依赖 P0 的
@@ -387,7 +519,9 @@ public class MainController {
                                                       LandService land,
                                                       FarmGameModel model,
                                                       MemoryService memoryService,
-                                                      Inventory inventory) {
+                                                      Inventory inventory,
+                                                      CollectionService collectionService,
+                                                      Runnable onCollected) {
         QualityService qualityService = new BasicQualityService();
         LegendaryService legendaryService = new BasicLegendaryService();
         // 神秘商人：事件期间目标作物售价 ×2（规则 §四十九），倍率由 D 的状态决定、C 只读取
@@ -413,7 +547,19 @@ public class MainController {
 
             @Override
             public HarvestResult harvest(Soil soil) {
-                return transaction.harvest(soil, inventory).getResult();
+                Crop crop = soil == null ? null : soil.getCrop();
+                CropType cropType = crop == null ? null : crop.getCropType();
+                HarvestOutcome outcome = transaction.harvest(soil, inventory);
+                if (outcome.isSuccess()) {
+                    // E P3：真正收获 → 该项图鉴永久 COLLECTED；传说突破 → 记入传说图鉴
+                    // （验收规范 §一百一十一，去重由 CollectionState 保证）。随后触发落盘。
+                    collectionService.collectCrop(cropType, outcome.getQuality());
+                    if (outcome.isLegendary()) {
+                        collectionService.collectLegendary(cropType);
+                    }
+                    onCollected.run();
+                }
+                return outcome.getResult();
             }
         };
     }
@@ -483,16 +629,36 @@ public class MainController {
      * 构建常驻顶栏：D 状态栏 + B 经营入口 + E 保存按钮 + 提示。
      */
     void buildTopBar(StatusView statusView, Node businessToolbar) {
+        buildTopBar(statusView, businessToolbar, null);
+    }
+
+    /**
+     * 构建常驻顶栏：D 状态栏 + B 经营入口 + E 保存/图鉴按钮 + 提示。
+     *
+     * <p>{@code collectionController} 为 {@code null} 时不挂「图鉴」入口
+     * （兼容既有仅顶栏的测试）；装配游戏闭环时传入，展开 E 的收集图鉴（验收规范 §一百二十七）。
+     */
+    void buildTopBar(StatusView statusView, Node businessToolbar, CollectionController collectionController) {
         Button saveButton = new Button("保存进度");
         saveButton.setOnAction(event -> onSaveButtonClick());
+        styleMenuButton(saveButton, 104, 32);
 
         topHintLabel = new Label();
+        topHintLabel.setStyle(SLOT_SUMMARY_STYLE);
         HBox topBar = new HBox(16);
         topBar.getChildren().add(statusView);
         if (businessToolbar != null) {
             topBar.getChildren().add(businessToolbar);
         }
-        topBar.getChildren().addAll(saveButton, topHintLabel);
+        topBar.getChildren().add(saveButton);
+        if (collectionController != null) {
+            CollectionPopupView collectionPopup = new CollectionPopupView(collectionController);
+            Button collectionButton = new Button("图鉴");
+            collectionButton.setOnAction(event -> collectionPopup.toggleBelow(collectionButton));
+            styleMenuButton(collectionButton, 88, 32);
+            topBar.getChildren().add(collectionButton);
+        }
+        topBar.getChildren().add(topHintLabel);
         topBar.setAlignment(Pos.CENTER_LEFT);
         topBar.setPadding(new Insets(6, 12, 6, 12));
 
