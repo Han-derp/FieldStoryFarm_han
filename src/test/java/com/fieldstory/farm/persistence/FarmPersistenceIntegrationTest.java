@@ -172,8 +172,7 @@ class FarmPersistenceIntegrationTest {
         // 装配层注册的回填钩子：落盘前把运行态天气写回 GameState
         manager.setBeforeSaveHook(() -> {
             state.setGameDay(model.getGameClock().getGameDay());
-            WeatherType type = model.getWeatherState().getWeatherType();
-            state.setCurrentWeather(type);
+            state.setCurrentWeather(model.getWeatherState().getWeatherType());
         });
         manager.saveAndExit();
 
@@ -185,7 +184,9 @@ class FarmPersistenceIntegrationTest {
 
         // 装配层读档还原：把存档天气还原到新模型（天气日索引与游戏天数同源）
         FarmGameModel reloaded = new FarmGameModel();
-        reloaded.restoreWeather(loaded.getCurrentWeather(), (int) loaded.getGameDay());
+        reloaded.restoreWeather(
+                loaded.getCurrentWeather() == null ? null : loaded.getCurrentWeather().name(),
+                (int) loaded.getGameDay());
         assertEquals(WeatherType.GREEN_RAIN, reloaded.getWeatherState().getWeatherType());
     }
 }

@@ -73,6 +73,19 @@ public class GameState {
      */
     private final Inventory inventory = new Inventory();
 
+    /**
+     * 收集图鉴状态（P3 新增，对应 SQLite {@code crop_collection} / {@code decoration_collection}
+     * / {@code legendary_collection} 三表，验收规范 §一百一十~§一百一十八）。
+     * 永久保存——退出重进后 FarmScore 与毕业判定不丢失（验收规范 §一百三十二 ⑤）。
+     */
+    private final CollectionState collection = new CollectionState();
+
+    /** 套装收集状态（P3 新增，对应 SQLite {@code set_collection} 表，验收规范 §一百一十八）。 */
+    private final SetCollectionState setCollection = new SetCollectionState();
+
+    /** 毕业状态（P3 新增，对应 SQLite {@code graduation} 表，验收规范 §一百二十九）。 */
+    private final GraduationState graduation = new GraduationState();
+
 
     public GameState() {
         this(null, 0L);
@@ -280,5 +293,20 @@ public class GameState {
     /** 玩家背包（永不为 null；空背包即空实例）。 */
     public Inventory getInventory() {
         return inventory;
+    }
+
+    /** 收集图鉴状态（永不为 null）。P3 起随存档持久化。 */
+    public CollectionState getCollection() {
+        return collection;
+    }
+
+    /** 套装收集状态（永不为 null）。P3 起随存档持久化。 */
+    public SetCollectionState getSetCollection() {
+        return setCollection;
+    }
+
+    /** 毕业状态（永不为 null）。P3 起随存档持久化。 */
+    public GraduationState getGraduation() {
+        return graduation;
     }
 }

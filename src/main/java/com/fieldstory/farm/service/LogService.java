@@ -1,21 +1,30 @@
 package com.fieldstory.farm.service;
 
-import com.fieldstory.farm.model.OfflineLog;
-import com.fieldstory.farm.model.OfflineSimulationResult;
+import com.fieldstory.farm.model.HarvestLog;
 
-import java.util.Optional;
+import java.util.List;
 
 /**
- * B 模块 P2 离线日志服务。
+ * 收获日志服务接口（C 模块 品质与传说域，P2 收获事务第⑮步）。
  *
- * <p>职责仅为把结构化离线事实转换为玩家可读叙事；不执行世界模拟、不访问数据库。
+ * <p>规则文档 §六十八 ⑮：收获事务提交前写入 HarvestLog；
+ * 验收规范 §一百零三"记录HarvestLog"、§一百零五 离线日志 UI 数据来源。
+ *
+ * <p>P2 使用内存态；持久化由 E 存档统一处理（与 CropMemory 同模式）。
  */
 public interface LogService {
 
     /**
-     * 根据一次离线模拟结果生成返回日志。
+     * 追加一条收获日志（成功收获事务提交前调用，按收获时间顺序保存）。
      *
-     * @return effectiveOfflineMinutes == 0 时返回 Optional.empty()
+     * @param log 收获日志（不可为 null）
      */
-    Optional<OfflineLog> buildOfflineLog(OfflineSimulationResult result);
+    void append(HarvestLog log);
+
+    /**
+     * 全部日志快照（只读，按追加顺序 = 收获时间顺序）。
+     *
+     * @return 日志列表
+     */
+    List<HarvestLog> listAll();
 }

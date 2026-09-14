@@ -35,6 +35,22 @@ import java.util.List;
  *   <li>{@code world_state.world_total_minutes}：世界时钟总分钟，用于把"退出瞬间"精确恢复。</li>
  * </ul>
  *
+ * <p><b>P2 v3 增量（验收规范 §一百零四 日志表）：</b>
+ * <ul>
+ *   <li>{@code event_log}：事件日志（可解释、可追溯，概要设计 §11.2）；</li>
+ *   <li>{@code offline_log}：离线日志（按游戏日解释离线期间变化，§一百零五）。</li>
+ * </ul>
+ * 两张日志表为<b>追加式</b>记录，不属于全量覆盖的会话状态，故不经
+ * {@code SqliteSaveService} 的清表—重写流程。
+ *
+ * <p><b>P3 v4 增量（验收规范 §一百一十~§一百二十九）：</b>
+ * <ul>
+ *   <li>{@code crop_collection} / {@code decoration_collection} / {@code legendary_collection}：
+ *       收集图鉴（作物 15 / 装饰 14 / 传说 3），永久保存；</li>
+ *   <li>{@code set_collection}：套装 setCollected / setActive 两个独立状态；</li>
+ *   <li>{@code graduation}：毕业状态单行表（FarmScore == 147 时写入）。</li>
+ * </ul>
+ *
  * <p><b>条件加列语法：</b>迁移语句以 {@value #ADD_COLUMN_PREFIX} 开头时表示"若该列不存在才加"，
  * 形如 {@code ADD COLUMN world_state.world_total_minutes INTEGER NOT NULL DEFAULT -1}。
  * SQLite 的 {@code ADD COLUMN} 在列已存在时会直接报错，而这个语法让迁移对
@@ -43,13 +59,14 @@ import java.util.List;
 public final class SchemaMigrator {
 
     /** 程序当前支持的数据库结构版本。新增表/字段时必须 +1 并追加迁移步骤。 */
-    public static final int SCHEMA_VERSION = 2;
+    public static final int SCHEMA_VERSION = 4;
 
     /** 「条件加列」语句前缀：列已存在时跳过，保证迁移幂等。 */
     static final String ADD_COLUMN_PREFIX = "ADD COLUMN ";
 
     /** 全部迁移步骤，按版本升序。 */
-    private static final List<MigrationStep> STEPS = List.of(stepToV1(), stepToV2());
+    private static final List<MigrationStep> STEPS =
+            List.of(stepToV1(), stepToV2(), stepToV3(), stepToV4());
 
     private SchemaMigrator() {
         // 工具类，禁止实例化
@@ -228,6 +245,69 @@ public final class SchemaMigrator {
                         + " unit_price INTEGER NOT NULL DEFAULT 0)",
                 // 条件加列：世界时钟总分钟（退出瞬间精确恢复；-1 = 未记录，按旧档按天恢复）
                 ADD_COLUMN_PREFIX + "world_state.world_total_minutes INTEGER NOT NULL DEFAULT -1"));
+    }
+
+    /**
+     * v2 → v3：P2 日志表增量（验收规范 §一百零四；DAO 归属 §一百五十一）。
+     *
+     * <p>只加两张<b>追加式</b>日志表，不动任何既有列，旧档原地升级不丢数据：
+     * <ul>
+     *   <li>{@code event_log}：记录每次随机事件发生（事件类型、起止世界时间、
+     *       神秘商人目标作物、payload、所属游戏日），供追溯与测试复现；</li>
+     *   <li>{@code offline_log}：按游戏日记录离线期间农场发生了什么（§一百零五 按日分组展示）。</li>
+     * </ul>
+     * 列取「最小可用」口径：与 {@code active_event} 对应列同名同义，接入方（D/B）需要更多字段时，
+     * 按本类升级规则新增 v4 迁移即可，不改动本步。
+     */
+    private static MigrationStep stepToV3() {
+        return new MigrationStep(3, List.of(
+                "CREATE TABLE IF NOT EXISTS event_log ("
+                        + " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                        + " day_index INTEGER NOT NULL DEFAULT 0,"
+                        + " event_type TEXT NOT NULL,"
+                        + " start_world_time INTEGER NOT NULL DEFAULT 0,"
+                        + " end_world_time INTEGER NOT NULL DEFAULT 0,"
+                        + " target_crop_type TEXT,"
+                        + " payload TEXT)",
+                "CREATE TABLE IF NOT EXISTS offline_log ("
+                        + " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                        + " day_index INTEGER NOT NULL,"
+                        + " summary TEXT NOT NULL)"));
+    }
+
+    /**
+     * v3 → v4：P3 收集与毕业增量（验收规范 §一百一十~§一百二十九；DAO 归属 §一百五十一条）。
+     *
+     * <p>只加表，不动任何既有列，旧档原地升级不丢数据：
+     * <ul>
+     *   <li>{@code crop_collection}：作物图鉴（作物 × 品质联合主键，三态状态），15 项目标；</li>
+     *   <li>{@code decoration_collection}：装饰图鉴（类型 id 主键，存在即已收集），14 项目标；</li>
+     *   <li>{@code legendary_collection}：传说图鉴（作物类型主键，存在即已获得），3 种目标；</li>
+     *   <li>{@code set_collection}：套装收集状态（collected 永久 / active 当前，两者独立）；</li>
+     *   <li>{@code graduation}：毕业单行表（首次达到 147 写入，只记一次）。</li>
+     * </ul>
+     * 这五张表都是<b>全量覆盖</b>的会话状态，经 {@code SqliteSaveService} 清表—重写。
+     */
+    private static MigrationStep stepToV4() {
+        return new MigrationStep(4, List.of(
+                "CREATE TABLE IF NOT EXISTS crop_collection ("
+                        + " crop_type TEXT NOT NULL,"
+                        + " quality TEXT NOT NULL,"
+                        + " status TEXT NOT NULL,"
+                        + " PRIMARY KEY (crop_type, quality))",
+                "CREATE TABLE IF NOT EXISTS decoration_collection ("
+                        + " decoration_type TEXT PRIMARY KEY)",
+                "CREATE TABLE IF NOT EXISTS legendary_collection ("
+                        + " crop_type TEXT PRIMARY KEY)",
+                "CREATE TABLE IF NOT EXISTS set_collection ("
+                        + " set_id TEXT PRIMARY KEY,"
+                        + " collected INTEGER NOT NULL DEFAULT 0,"
+                        + " active INTEGER NOT NULL DEFAULT 0)",
+                "CREATE TABLE IF NOT EXISTS graduation ("
+                        + " id INTEGER PRIMARY KEY CHECK (id = 1),"
+                        + " graduated INTEGER NOT NULL DEFAULT 0,"
+                        + " graduation_world_time INTEGER NOT NULL DEFAULT -1,"
+                        + " graduation_game_day INTEGER NOT NULL DEFAULT -1)"));
     }
 
     /** 单个迁移步骤：执行完 {@code version} 所列 DDL 后，库结构版本应等于 {@code version}。 */

@@ -3,7 +3,7 @@ package com.fieldstory.farm.model;
 import java.util.List;
 
 /**
- * B 模块 P1/P2 的 14 种装饰定义。
+ * B 模块 P1 的 14 种装饰定义。
  *
  * <p>价格和效果严格来自 V4.0 规则文档。
  * P2 启动基线冻结 footprint：
@@ -15,57 +15,23 @@ import java.util.List;
 public enum DecorationType {
 
     SUNFLOWER("D01", "向日葵", 80, "sunflower.png", 1, 1,
-            List.of(new DecorationEffect(
-                    BuffType.ADJACENT_GROWTH,
-                    0.05,
-                    0.15,
-                    null))),
+            List.of(new DecorationEffect(BuffType.ADJACENT_GROWTH, 0.05, 0.15, null))),
 
     ROSE_BED("D02", "玫瑰花坛", 120, "rose_red.png", 1, 1,
-            List.of(new DecorationEffect(
-                    BuffType.WATER_OPERATION_MULTIPLIER,
-                    1.10,
-                    1.10,
-                    null))),
+            List.of(new DecorationEffect(BuffType.WATER_OPERATION_MULTIPLIER, 1.10, 1.10, null))),
 
-    WOODEN_FENCE(
-            "D03",
-            "木栅栏",
-            50,
-            "wooden_fence.png",
-            1,
-            1,
-            List.of()),
+    WOODEN_FENCE("D03", "木栅栏", 50, "wooden_fence.png", 1, 1, List.of()),
 
-    STREET_LAMP(
-            "D04",
-            "路灯",
-            100,
-            "street_lamp.png",
-            1,
-            1,
-            List.of()),
+    STREET_LAMP("D04", "路灯", 100, "street_lamp.png", 1, 1, List.of()),
 
     BIG_TREE("D05", "大树", 200, "big_tree.png", 1, 1,
-            List.of(new DecorationEffect(
-                    BuffType.GLOBAL_GROWTH,
-                    0.03,
-                    0.03,
-                    null))),
+            List.of(new DecorationEffect(BuffType.GLOBAL_GROWTH, 0.03, 0.03, null))),
 
     STONE_LANTERN("D06", "石灯笼", 150, "stone_lantern.png", 1, 1,
-            List.of(new DecorationEffect(
-                    BuffType.WITHER_RESISTANCE,
-                    0.70,
-                    0.70,
-                    null))),
+            List.of(new DecorationEffect(BuffType.WITHER_RESISTANCE, 0.70, 0.70, null))),
 
     SMALL_FOUNTAIN("D07", "小喷泉", 250, "small_fountain.png", 1, 1,
-            List.of(new DecorationEffect(
-                    BuffType.FERTILIZER_OPERATION_MULTIPLIER,
-                    1.20,
-                    1.20,
-                    null))),
+            List.of(new DecorationEffect(BuffType.FERTILIZER_OPERATION_MULTIPLIER, 1.20, 1.20, null))),
 
     // ==================== P2 大型装饰：2x2 ====================
 
@@ -113,16 +79,8 @@ public enum DecorationType {
 
     HARVEST_GODDESS("D14", "丰收女神像", 800, "harvest_goddess.png", 2, 2,
             List.of(
-                    new DecorationEffect(
-                            BuffType.PRICE_RATE,
-                            0.15,
-                            0.15,
-                            null),
-                    new DecorationEffect(
-                            BuffType.QUALITY_SCORE,
-                            5,
-                            5,
-                            null)
+                    new DecorationEffect(BuffType.PRICE_RATE, 0.15, 0.15, null),
+                    new DecorationEffect(BuffType.QUALITY_SCORE, 5, 5, null)
             ));
 
     private final String id;
@@ -133,15 +91,13 @@ public enum DecorationType {
     private final int height;
     private final List<DecorationEffect> effects;
 
-    DecorationType(
-            String id,
-            String displayName,
-            int price,
-            String assetFileName,
-            int width,
-            int height,
-            List<DecorationEffect> effects) {
-
+    DecorationType(String id,
+                   String displayName,
+                   int price,
+                   String assetFileName,
+                   int width,
+                   int height,
+                   List<DecorationEffect> effects) {
         this.id = id;
         this.displayName = displayName;
         this.price = price;
@@ -181,11 +137,9 @@ public enum DecorationType {
 
     public static int totalBaseCost() {
         int total = 0;
-
         for (DecorationType type : values()) {
             total += type.price;
         }
-
         return total;
     }
 }

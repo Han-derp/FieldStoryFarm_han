@@ -10,6 +10,7 @@ import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Tooltip;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -34,8 +35,7 @@ import java.util.function.Consumer;
  * 隐藏式操作菜单并自动避让地图边界（UI规范 §12）。
  *
  * <p>纯静态函数 {@link #tileColorFor} / {@link #cropBlockSizeFor} /
- * {@link #cropFrameIndexFor} / {@link #tooltipTextFor} 只返回颜色/尺寸/帧号/字符串，
- * 不创建 JavaFX 节点，
+ * {@link #tooltipTextFor} 只返回颜色/尺寸/字符串，不创建 JavaFX 节点，
  * 可在无 GUI 线程下单测（任务约束：JavaFX 节点创建不放纯函数里）。
  * 颜色常量用 {@link Color#rgb} 数值构造，同样不依赖 GUI 线程。
  */
@@ -141,6 +141,18 @@ public class FarmView extends Pane {
     /** 每格 P0 作物占位块（PLANTED 且未成熟时可见） */
     private final Rectangle[][] cropBlocks = new Rectangle[MAP_SIZE][MAP_SIZE];
 
+    /** 每格 P1 作物贴图层（决策 D1/D2/D3：2× 放大、底对齐、MATURE 末帧；贴图缺失时隐藏回退方块） */
+    private final ImageView[][] cropSprites = new ImageView[MAP_SIZE][MAP_SIZE];
+
+    /** 每格 P1 地面贴图层（决策 D-G1/D-G2/D-G3：2× 放大、格内居中；贴图缺失时隐藏保持纯色底） */
+    private final ImageView[][] groundTextures = new ImageView[MAP_SIZE][MAP_SIZE];
+
+    /**
+     * 今日是否湿天（天气 ∈ {RAIN, GREEN_RAIN}，由调用方换算，决策 D-G2）；
+     * 经 {@link #setWetToday} 同步（D-G4 跨模块接线预留）。
+     */
+    private boolean wetToday = false;
+
     /** 每格 Tooltip（存引用以便刷新文案） */
     private final Tooltip[][] tooltips = new Tooltip[MAP_SIZE][MAP_SIZE];
 
@@ -183,6 +195,17 @@ public class FarmView extends Pane {
      */
     public void setCurrentGameDay(long currentGameDay) {
         this.currentGameDay = currentGameDay;
+    }
+
+    /**
+     * 更新今日湿天标记（地面贴图湿判定输入；决策 D-G2）。
+     * 由 Controller 跨天时把天气换算为布尔（∈ {RAIN, GREEN_RAIN} → true）后、
+     * 刷新视图前同步；D-G4 跨模块接线不在本卡范围，本卡只提供存储与使用。
+     *
+     * @param wetToday 今日是否湿天
+     */
+    public void setWetToday(boolean wetToday) {
+        this.wetToday = wetToday;
     }
 
     /**
@@ -255,39 +278,6 @@ public class FarmView extends Pane {
     }
 
     /**
-     * 纯函数：P1 作物贴图帧索引（UI规范 §7 Tile 组合策略：作物层图集帧
-     * 与生长阶段组合）。
-     *
-     * <p>帧映射：SEED→0、SPROUT→2、GROWING→4、MATURE→totalFrames-1
-     * （末帧）；null 或 WITHERED 不显示贴图返回 -1（决策 D3）。
-     * 帧数不足时钳制到 totalFrames-1；totalFrames&lt;=0 视为无图集返回 -1。
-     *
-     * @param stage       作物成长阶段（可为 null）
-     * @param totalFrames 图集总帧数（横向排列）
-     * @return 帧索引；不显示贴图时为 -1
-     */
-    public static int cropFrameIndexFor(GrowthStage stage, int totalFrames) {
-        if (stage == null || stage == GrowthStage.WITHERED) {
-            return -1;
-        }
-        if (totalFrames <= 0) {
-            return -1;
-        }
-        int lastFrame = totalFrames - 1;
-        switch (stage) {
-            case SEED:
-                return Math.min(0, lastFrame);
-            case SPROUT:
-                return Math.min(2, lastFrame);
-            case GROWING:
-                return Math.min(4, lastFrame);
-            case MATURE:
-            default:
-                return lastFrame;
-        }
-    }
-
-    /**
      * 坏数据兜底：crop_type 无法识别时为 null（存档允许 {@code crop_type=NULL}，
      * P1 设计文档 §3），返回占位名而非抛 NPE。
      *
@@ -299,9 +289,111 @@ public class FarmView extends Pane {
     }
 
     /**
+     * 纯函数：成长阶段 → 图集帧索引（A 模块 P1 作物贴图接入；决策文档 D2/D3；
+     * UI规范 §7 Tile组合策略）。
+     *
+     * <p>映射：SEED→0、SPROUT→2、GROWING→4、MATURE→末帧（totalFrames-1）、
+     * WITHERED→-1（不显示贴图哨兵）。帧数不足时钳制到 totalFrames-1；
+     * stage 为 null 或 totalFrames≤0 返回 -1（坏数据兜底，
+     * AImageAssets 遇 -1 不创建贴图视图）。
+     *
+     * @param stage      成长阶段（可为 null）
+     * @param frameCount 图集总帧数
+     * @return 帧索引；-1 表示不显示贴图
+     */
+    public static int cropFrameIndexFor(GrowthStage stage, int frameCount) {
+        if (stage == null || frameCount <= 0 || stage == GrowthStage.WITHERED) {
+            return -1;
+        }
+        int frame;
+        switch (stage) {
+            case SEED:
+                frame = 0;
+                break;
+            case SPROUT:
+                frame = 2;
+                break;
+            case GROWING:
+                frame = 4;
+                break;
+            case MATURE:
+                frame = frameCount - 1;
+                break;
+            default:
+                return -1;
+        }
+        return Math.min(frame, frameCount - 1);
+    }
+
+    /**
+     * 纯函数：地面贴图变体判定（A 模块 P1 地面 Tile 美化；决策 D-G2/D-G3；
+     * UI规范 §6 地图、§7 Tile 组合策略）。
+     *
+     * <p>变体映射：DECORATION_AREA→GRASS（SHOP/SHOWCASE 占位同草地）；
+     * soil 为 null→GRASS；EMPTY/LOCKED→NONE（D-G3 不铺贴图，保持纯色语义）；
+     * TILLED→wetToday?WET:TILLED（无作物，湿判定仅依赖天气）；
+     * PLANTED 中 MATURE/WITHERED→NONE（D-G3），其余按湿判定：
+     * 今日已浇（lastManualWaterGameDay == currentGameDay，决策 D14 long 用 ==）
+     * 或今日湿天（wetToday，天气 ∈ {RAIN, GREEN_RAIN} 由调用方换算，决策 D-G2）
+     * →WET，否则 TILLED。
+     *
+     * <p>坏数据兜底：任何入参为 null 不得抛 NPE（口径同 cropFrameIndexFor）；
+     * plotType 为 null 视同非种植格（草地）；state 为 null 或未知→NONE。
+     *
+     * @param plotType       格类型（可为 null）
+     * @param soil           该格土地（装饰区为 null）
+     * @param currentGameDay 当前游戏日（来自 D 的 GameClock.getGameDay）
+     * @param wetToday       今日是否湿天（天气 ∈ {RAIN, GREEN_RAIN}，由调用方换算，决策 D-G2）
+     * @return 地面贴图变体；NONE 表示不铺贴图
+     */
+    public static GroundVariant groundVariantFor(FarmPlot plotType, Soil soil,
+                                                 long currentGameDay, boolean wetToday) {
+        if (plotType != FarmPlot.FARM_PLOT) {
+            // DECORATION_AREA 草地；SHOP/SHOWCASE P0 布局不出现，占位同草地；
+            // plotType 为 null 视同非种植格（坏数据兜底，不抛 NPE）
+            return GroundVariant.GRASS;
+        }
+        if (soil == null) {
+            return GroundVariant.GRASS;
+        }
+        SoilState state = soil.getState();
+        if (state == null) {
+            // 坏数据兜底：state 可能被适配层降级为 null，不铺贴图
+            return GroundVariant.NONE;
+        }
+        switch (state) {
+            case EMPTY:
+            case LOCKED:
+                // D-G3：不铺贴图，保持纯色语义
+                return GroundVariant.NONE;
+            case TILLED:
+                // TILLED 无作物：湿判定只依赖天气（决策 D-G2）
+                return wetToday ? GroundVariant.WET : GroundVariant.TILLED;
+            case PLANTED:
+                Crop crop = soil.getCrop();
+                if (crop != null && crop.getGrowthStage() == GrowthStage.MATURE) {
+                    // D-G3：成熟格保留整格高亮底色，不铺地面贴图
+                    return GroundVariant.NONE;
+                }
+                if (crop != null && crop.getGrowthStage() == GrowthStage.WITHERED) {
+                    // D-G3：枯萎格保留整格枯萎色，不铺地面贴图
+                    return GroundVariant.NONE;
+                }
+                // 湿判定（决策 D-G2）：今日已浇（决策 D14 long 用 ==）或今日湿天；
+                // crop 为 null 时按仅天气判定（坏数据兜底，不抛 NPE）
+                boolean wateredToday = crop != null
+                        && crop.getLastManualWaterGameDay() == currentGameDay;
+                return (wateredToday || wetToday) ? GroundVariant.WET : GroundVariant.TILLED;
+            default:
+                // 未知状态（坏数据）：不铺贴图
+                return GroundVariant.NONE;
+        }
+    }
+
+    /**
      * 纯函数：悬停提示文案（UI规范 §10）。
      *
-     * <p>六种文案：null=装饰区（可放置装饰）、EMPTY=未开垦、TILLED=已开垦可播种、
+     * <p>六种文案：null=装饰区可放置装饰、EMPTY=未开垦、TILLED=已开垦可播种、
      * PLANTED=作物名+成长x%+今日已浇/未浇、MATURE=已成熟可收获、
      * WITHERED=已枯萎，请铲除（P1，规则 §16.5）。
      *
@@ -352,8 +444,6 @@ public class FarmView extends Pane {
 
                 Rectangle tile = new Rectangle(column * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
                 tile.setFill(tileColorFor(plotType, soil));
-                tile.setStroke(COLOR_TEXT);
-                tile.setStrokeWidth(1);
                 Tooltip tooltip = new Tooltip(tooltipTextFor(soil, currentGameDay));
                 tooltip.setShowDelay(Duration.millis(100));     // 默认 1000ms 太慢
                 tooltip.setShowDuration(Duration.INDEFINITE);   // 悬停常显：鼠标移开才消失
@@ -366,18 +456,80 @@ public class FarmView extends Pane {
                 tiles[row][column] = tile;
                 tooltips[row][column] = tooltip;
 
+                // P1 地面贴图层（z 序：tile → groundTexture → cropBlock → cropSprite）
+                ImageView groundTexture = new ImageView();
+                groundTexture.setVisible(false);
+                groundTexture.setMouseTransparent(true);  // 鼠标穿透：悬停/点击作用于地块
+                groundTexture.setSmooth(false);           // 像素风：最近邻不平滑（决策 D-G1）
+                groundTexture.setPreserveRatio(false);
+                groundTextures[row][column] = groundTexture;
+                getChildren().add(groundTexture);
+                updateGroundTexture(row, column, plotType, soil);
+
                 Rectangle cropBlock = new Rectangle();
                 cropBlock.setFill(COLOR_GRASS);
                 cropBlock.setMouseTransparent(true);   // 鼠标穿透：悬停/点击作物等同作用于地块
                 cropBlock.setVisible(false);
                 cropBlocks[row][column] = cropBlock;
                 getChildren().add(cropBlock);
+
+                // P1 作物贴图层（z 序：tile → cropBlock → cropSprite，保持行优先）
+                ImageView cropSprite = new ImageView();
+                cropSprite.setVisible(false);
+                cropSprite.setMouseTransparent(true);  // 鼠标穿透：悬停/点击作用于地块
+                cropSprite.setUserData("cropSprite");  // 👈 加上这行专属记号
+                cropSprites[row][column] = cropSprite;
+                getChildren().add(cropSprite);
+
                 updateCropBlock(row, column, plotType, soil);
             }
         }
     }
 
-    /** 按格当前状态刷新作物占位块（位置居中于格内）。 */
+    /**
+     * P1 地面贴图层刷新（UI规范 §6 地图、§7 Tile 组合策略；决策 D-G1/D-G2/D-G3）。
+     *
+     * <p>变体判定见 {@link #groundVariantFor}：NONE（MATURE/WITHERED/EMPTY/LOCKED，
+     * 决策 D-G3）或贴图加载失败（{@link ATileAssets#viewFor} 返回 null）时
+     * 隐藏贴图层，纯色底语义与改造前一致；其余按变体切取图集帧，
+     * 2× 放大（32×32）后于 44×44 格内居中（决策 D-G1，四周留 6px 底色边）。
+     * 复用构造期占位视图（原地更新 image/viewport/fit），不替换节点，
+     * 保证 Z 序稳定（tile → groundTexture → cropBlock → cropSprite）。
+     *
+     * @param row      全局行坐标
+     * @param column   全局列坐标
+     * @param plotType 格类型
+     * @param soil     该格土地（装饰区为 null）
+     */
+    private void updateGroundTexture(int row, int column, FarmPlot plotType, Soil soil) {
+        ImageView target = groundTextures[row][column];
+        GroundVariant variant = groundVariantFor(plotType, soil, currentGameDay, wetToday);
+        if (variant == GroundVariant.NONE) {
+            // 决策 D-G3：MATURE/WITHERED/EMPTY/LOCKED 保持纯色语义，不铺贴图
+            target.setVisible(false);
+            target.setImage(null); // 👈 加上了这行，清空图片
+            return;
+        }
+        ImageView view = ATileAssets.viewFor(variant);
+        if (view == null) {
+            // 图集缺失或加载失败：隐藏贴图层，纯色底与其余行为不变
+            target.setVisible(false);
+            target.setImage(null); // 👈 加上了这行，清空图片
+            return;
+        }
+        target.setImage(view.getImage());
+        target.setViewport(view.getViewport());
+        target.setFitWidth(view.getFitWidth());
+        target.setFitHeight(view.getFitHeight());
+        // 居中定位（决策 D-G1）：32×32 居中于 44×44 格内，四周留 6px 底色边
+        target.setX(column * TILE_SIZE + (TILE_SIZE - target.getFitWidth()) / 2.0);
+        target.setY(row * TILE_SIZE + (TILE_SIZE - target.getFitHeight()) / 2.0);
+        target.setVisible(true);
+    }
+
+    /**
+     * 按格当前状态刷新作物占位块（位置居中于格内），并联动刷新贴图层（P1）。
+     */
     private void updateCropBlock(int row, int column, FarmPlot plotType, Soil soil) {
         Rectangle cropBlock = cropBlocks[row][column];
         Crop crop = soil == null ? null : soil.getCrop();
@@ -388,14 +540,69 @@ public class FarmView extends Pane {
                 && crop.getGrowthStage() != GrowthStage.MATURE;
         if (!visible) {
             cropBlock.setVisible(false);
+        } else {
+            int size = cropBlockSizeFor(crop.getGrowthStage());
+            cropBlock.setWidth(size);
+            cropBlock.setHeight(size);
+            cropBlock.setX(column * TILE_SIZE + (TILE_SIZE - size) / 2.0);
+            cropBlock.setY(row * TILE_SIZE + (TILE_SIZE - size) / 2.0);
+            cropBlock.setVisible(true);
+        }
+        updateCropSprite(row, column, plotType, soil);
+    }
+
+    /**
+     * P1 作物贴图层刷新（UI规范 §7 Tile 组合策略；决策 D1/D2/D3）。
+     *
+     * <p>显示条件：FARM_PLOT + PLANTED + 作物非空 + 阶段非空且非 WITHERED；
+     * MATURE 显示末帧贴图并保留整格高亮底色（决策 D2）。贴图经
+     * {@link AImageAssets#viewFor} 切取，2× 放大后底对齐水平居中，
+     * 高于格子上边界时向上越界不裁切（决策 D1）。
+     *
+     * <p>坏数据兜底：crop_type/stage 为 null、图集缺失或加载失败时
+     * {@code viewFor} 返回 null，此时仅隐藏贴图层，方块逻辑保持原样
+     * （含 MATURE 整格高亮），外观与行为与改造前完全一致。
+     *
+     * @param row      全局行坐标
+     * @param column   全局列坐标
+     * @param plotType 格类型
+     * @param soil     该格土地（装饰区为 null）
+     */
+    private void updateCropSprite(int row, int column, FarmPlot plotType, Soil soil) {
+        ImageView cropSprite = cropSprites[row][column];
+        Crop crop = soil == null ? null : soil.getCrop();
+        boolean showSprite = plotType == FarmPlot.FARM_PLOT
+                && soil != null
+                && soil.getState() == SoilState.PLANTED
+                && crop != null
+                && crop.getCropType() != null
+                && crop.getGrowthStage() != null
+                && crop.getGrowthStage() != GrowthStage.WITHERED;
+        if (!showSprite) {
+            // 非种植格/无作物/阶段坏数据/WITHERED（决策 D3）：不显示贴图
+            cropSprite.setVisible(false);
+            cropSprite.setImage(null); // 👈 加上了这行，清空图片
             return;
         }
-        int size = cropBlockSizeFor(crop.getGrowthStage());
-        cropBlock.setWidth(size);
-        cropBlock.setHeight(size);
-        cropBlock.setX(column * TILE_SIZE + (TILE_SIZE - size) / 2.0);
-        cropBlock.setY(row * TILE_SIZE + (TILE_SIZE - size) / 2.0);
-        cropBlock.setVisible(true);
+        ImageView view = AImageAssets.viewFor(crop.getCropType(), crop.getGrowthStage());
+        if (view == null) {
+            // 贴图缺失或枚举坏数据：隐藏贴图，方块逻辑原样（含 MATURE 整格高亮）
+            cropSprite.setVisible(false);
+            cropSprite.setImage(null); // 👈 加上了这行，清空图片
+            return;
+        }
+        cropSprite.setImage(view.getImage());
+        cropSprite.setViewport(view.getViewport());
+        cropSprite.setFitWidth(view.getFitWidth());
+        cropSprite.setFitHeight(view.getFitHeight());
+        cropSprite.setPreserveRatio(view.isPreserveRatio());
+        cropSprite.setSmooth(view.isSmooth());
+        // 底对齐水平居中（决策 D1）：放大后高于格子时向上越界，不裁切不缩小
+        cropSprite.setX(column * TILE_SIZE + (TILE_SIZE - cropSprite.getFitWidth()) / 2.0);
+        cropSprite.setY((row + 1) * TILE_SIZE - cropSprite.getFitHeight());
+        cropSprite.setVisible(true);
+        // 避免贴图与 P0 占位块双显示（MATURE 方块本已隐藏，此处幂等）
+        cropBlocks[row][column].setVisible(false);
     }
 
     /** 动作完成后刷新对应格：底色 + 作物块 + Tooltip 文案。 */
@@ -407,6 +614,7 @@ public class FarmView extends Pane {
         int column = soil.getColumn();
         FarmPlot plotType = farm.getPlotType(row, column);
         tiles[row][column].setFill(tileColorFor(plotType, soil));
+        updateGroundTexture(row, column, plotType, soil);
         updateCropBlock(row, column, plotType, soil);
         refreshTooltip(soil);
     }
@@ -439,6 +647,10 @@ public class FarmView extends Pane {
         selectionRect.setX(soil.getColumn() * TILE_SIZE);
         selectionRect.setY(soil.getRow() * TILE_SIZE);
         selectionRect.setVisible(true);
+        // 点击会隐藏 Tooltip（JavaFX 默认）；选中后立刻重开，
+        // 鼠标不离开格子也能持续看到状态。
+        // 守卫：无窗口环境（单元测试）跳过 .show()，避免
+        // "The owner node needs to be associated with a window"
         Rectangle tile = tiles[soil.getRow()][soil.getColumn()];
         if (tile.getScene() != null && tile.getScene().getWindow() != null) {
             tooltips[soil.getRow()][soil.getColumn()]
@@ -494,11 +706,14 @@ public class FarmView extends Pane {
         int row = soil.getRow();
         int column = soil.getColumn();
         tooltips[row][column].setText(message);
+        // 守卫：无窗口环境（单元测试）跳过 .show()，避免
+        // "The owner node needs to be associated with a window"
         Rectangle tile = tiles[row][column];
         if (tile.getScene() != null && tile.getScene().getWindow() != null) {
             tooltips[row][column].show(tile, TILE_SIZE / 2.0, TILE_SIZE / 2.0);
         }
     }
+
     // ==================== 按钮（UI规范 §13） ====================
 
     /**

@@ -11,11 +11,14 @@ import com.fieldstory.farm.model.item.EventPriceRateProvider;
 import com.fieldstory.farm.model.item.Inventory;
 import com.fieldstory.farm.model.item.Item;
 import com.fieldstory.farm.model.item.ItemType;
+import com.fieldstory.farm.model.HarvestLog;
 import com.fieldstory.farm.service.HarvestOutcome;
 import com.fieldstory.farm.service.HarvestResult;
 import com.fieldstory.farm.service.HarvestTransactionService;
 import com.fieldstory.farm.service.LandService;
+import com.fieldstory.farm.service.LegendaryFirstRewardService;
 import com.fieldstory.farm.service.LegendaryService;
+import com.fieldstory.farm.service.LogService;
 import com.fieldstory.farm.service.MemoryService;
 import com.fieldstory.farm.service.QualityScoreInput;
 import com.fieldstory.farm.service.QualityService;
@@ -26,10 +29,11 @@ import java.util.Objects;
 /**
  * {@link HarvestTransactionService} 基础实现（C 模块 品质与传说域，P2）。
  *
- * <p>完整收获事务（验收规范 §一百零三 流程）：
+ * <p>完整收获事务（验收规范 §一百零三 流程；规则文档 §六十八 18 步）：
  * 检查 MATURE → QualityService 计算 Score → LegendaryService 突破判定
  * → 确定 Quality（§一百零二）→ 售价 = 基础售价 × 品质倍率 × 事件倍率
- * → 发金币 → 发肥料 → 落档 CropMemory + 生成生命故事 → 清除土地 Crop
+ * → 发金币 → 发肥料 → 首次传说奖励（§六十七，可选依赖）→ 落档 CropMemory
+ * + 生成生命故事 → 写入 HarvestLog（§六十八 ⑮，可选依赖）→ 清除土地 Crop
  * → Soil=TILLED。
  *
  * <p>事务原子性（规则文档 §六十八）：全部计算完成后才依次变更状态
@@ -72,8 +76,15 @@ public class BasicHarvestTransactionService implements HarvestTransactionService
     /** 事件售价倍率提供者（D 模块实现；默认无事件倍率 1.0） */
     private final EventPriceRateProvider eventPriceRateProvider;
 
+    /** 首次传说奖励服务（C 的 P2 服务；null = 不发放首次奖励，向后兼容） */
+    private final LegendaryFirstRewardService firstRewardService;
+
+    /** 收获日志服务（C 的 P2 服务；null = 不写日志，向后兼容） */
+    private final LogService logService;
+
     /**
-     * 便捷构造：事件倍率默认 {@link EventPriceRateProvider#NONE}（1.0）。
+     * 便捷构造：事件倍率默认 {@link EventPriceRateProvider#NONE}（1.0），
+     * 不发放首次传说奖励、不写收获日志（P2 之前旧行为）。
      */
     public BasicHarvestTransactionService(EconomyService economyService,
                                           LandService landService,
@@ -86,7 +97,7 @@ public class BasicHarvestTransactionService implements HarvestTransactionService
     }
 
     /**
-     * 完整构造。
+     * 构造（P2 之前旧签名）：不发放首次传说奖励、不写收获日志。
      *
      * @param economyService        经济服务（B）
      * @param landService           土地服务（A）
@@ -103,6 +114,32 @@ public class BasicHarvestTransactionService implements HarvestTransactionService
                                           MemoryService memoryService,
                                           GameClock gameClock,
                                           EventPriceRateProvider eventPriceRateProvider) {
+        this(economyService, landService, qualityService, legendaryService,
+                memoryService, gameClock, eventPriceRateProvider, null, null);
+    }
+
+    /**
+     * 完整构造（P2 收获事务 18 步全链路）。
+     *
+     * @param economyService        经济服务（B）
+     * @param landService           土地服务（A）
+     * @param qualityService        品质服务（C）
+     * @param legendaryService      传说服务（C）
+     * @param memoryService         记忆服务（C）
+     * @param gameClock             世界时钟（D）
+     * @param eventPriceRateProvider 事件售价倍率提供者（D）；null 视为 NONE
+     * @param firstRewardService    首次传说奖励服务（C）；null = 不发放（规则文档 §六十七）
+     * @param logService            收获日志服务（C）；null = 不写日志（规则文档 §六十八 ⑮）
+     */
+    public BasicHarvestTransactionService(EconomyService economyService,
+                                          LandService landService,
+                                          QualityService qualityService,
+                                          LegendaryService legendaryService,
+                                          MemoryService memoryService,
+                                          GameClock gameClock,
+                                          EventPriceRateProvider eventPriceRateProvider,
+                                          LegendaryFirstRewardService firstRewardService,
+                                          LogService logService) {
         this.economyService = Objects.requireNonNull(economyService, "经济服务不能为空");
         this.landService = Objects.requireNonNull(landService, "土地服务不能为空");
         this.qualityService = Objects.requireNonNull(qualityService, "品质服务不能为空");
@@ -112,6 +149,8 @@ public class BasicHarvestTransactionService implements HarvestTransactionService
         this.eventPriceRateProvider = eventPriceRateProvider == null
                 ? EventPriceRateProvider.NONE
                 : eventPriceRateProvider;
+        this.firstRewardService = firstRewardService;
+        this.logService = logService;
     }
 
     @Override
@@ -164,15 +203,32 @@ public class BasicHarvestTransactionService implements HarvestTransactionService
             inventory.addItem(new Item(ItemType.FERTILIZER, fertilizerReward));
         }
 
-        // ⑧ 落档记忆 + 生成生命故事（验收规范 §九十四；规则文档 §七十）
+        // ⑫ 首次传说奖励 +500 金币（规则文档 §六十七：三种传说各领一次；
+        // 未装配奖励服务时跳过，保持 P2 之前旧行为）
+        int firstRewardGold = 0;
+        if (legendary && firstRewardService != null) {
+            firstRewardGold = firstRewardService.claimFirstReward(crop.getCropType());
+            if (firstRewardGold > 0) {
+                economyService.addGold(firstRewardGold);
+            }
+        }
+
+        // ⑬⑭ 落档记忆 + 生成生命故事（验收规范 §九十四；规则文档 §七十）
         String story = memoryService.completeHarvest(memory, quality, legendary, harvestWorldTime);
 
-        // ⑨~⑩ 清除土地 Crop → Soil=TILLED（A 的 LandService，决策 D09；
+        // ⑮ 写入 HarvestLog（规则文档 §六十八；未装配日志服务时跳过）
+        if (logService != null) {
+            logService.append(new HarvestLog(crop.getCropUuid(), crop.getCropType(),
+                    quality, legendary, sellPrice, fertilizerReward, firstRewardGold,
+                    story, harvestWorldTime));
+        }
+
+        // ⑯⑰ 清除土地 Crop → Soil=TILLED（A 的 LandService，决策 D09；
         // 必须先完成入账与落档再移除作物，作物移除后无法再读作物信息）
         landService.removeCropAndSetTilled(soil);
 
         return HarvestOutcome.success(quality, score, sellPrice, fertilizerReward,
-                legendary, story, memory);
+                legendary, story, memory, firstRewardGold);
     }
 
     /** 当前世界时间（游戏小时）：gameDay×24 + gameHour（决策 D14 口径）。 */
