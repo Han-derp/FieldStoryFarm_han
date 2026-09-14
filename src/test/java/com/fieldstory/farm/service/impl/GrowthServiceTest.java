@@ -4,6 +4,7 @@ import com.fieldstory.farm.model.Crop;
 import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.GrowthStage;
 import com.fieldstory.farm.model.impl.BasicCrop;
+import com.fieldstory.farm.service.GrowthRates;
 import com.fieldstory.farm.service.GrowthService;
 import com.fieldstory.farm.service.WateringService;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,6 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * <p>P1 升级（A 模块设计文档 §6）：3 参重载第三参 weatherRate，
  * 公式 {@code Base × Days × WeatherRate × OperationRate}（验收规范 §四十九），
  * 2 参用例不动、行为不变。
+ *
+ * <p>P2 升级（D 模块 P2 文档 §二；计划书 §5 六因子）：4 参重载第四参
+ * {@link GrowthRates}，公式 {@code Base × Days × WeatherRate × DecorationRate
+ * × EventRate × OperationRate}，2/3 参用例不动、行为不变。
  *
  * <p>不使用 CropFactory（其内部含 UUID.randomUUID），作物状态手动构造；
  * 不使用系统时间，elapsedGameDays 直接传游戏天数。
@@ -203,5 +208,87 @@ class GrowthServiceTest {
         growthService.applyGrowth(b, 1.0, 1.0);
         assertEquals(a.getGrowthProgress(), b.getGrowthProgress(), 1e-9);
         assertEquals(a.getGrowthStage(), b.getGrowthStage());
+    }
+
+    // ==================== P2 4 参重载：GrowthRates（计划书 §5 六因子；验收规范 §四十九；D 模块 P2 文档 §二） ====================
+
+    /**
+     * 三率连乘（计划书 §5 六因子）：小麦 base=50、elapsed=1、无浇水加成、
+     * rates(0.5, 1.5, 2.0) → 50 × 0.5 × 1.5 × 2.0 × 1.0 = 75。
+     */
+    @Test
+    void calculateGrowthDeltaWithRates() {
+        Crop crop = wheat();
+        assertEquals(75.0, growthService.calculateGrowthDelta(crop, 1.0,
+                new GrowthRates(0.5, 1.5, 2.0)), 1e-9);
+    }
+
+    /**
+     * 彩虹日 EventRate=2.0（D 模块 P2 文档 §二）：rates(1.0, 1.0, 2.0)
+     * → 50 × 2 = 100，为 P0 结果的 ×2。
+     */
+    @Test
+    void calculateGrowthDeltaWithRainbowDayDoubles() {
+        Crop crop = wheat();
+        assertEquals(100.0, growthService.calculateGrowthDelta(crop, 1.0,
+                new GrowthRates(1.0, 1.0, 2.0)), 1e-9);
+    }
+
+    /**
+     * P0 占位倍率等价性（P0/P1 兼容红线）：GrowthRates.P0 三率全 1.0，
+     * 4 参与 2 参结果一致（含浇水加成）。
+     */
+    @Test
+    void fourArgWithP0RatesEquivalentToTwoArg() {
+        Crop a = wheat();
+        Crop b = wheat();
+        a.setManualWaterCount(1);
+        b.setManualWaterCount(1);
+
+        assertEquals(growthService.calculateGrowthDelta(a, 0.5),
+                growthService.calculateGrowthDelta(b, 0.5, GrowthRates.P0), 1e-9);
+    }
+
+    /**
+     * 非法率钳制（非功能需求）：weatherRate=-0.5 / NaN 构造时钳制为 0
+     * → delta 为 0（不产生负增长/NaN 污染进度）。
+     */
+    @Test
+    void calculateGrowthDeltaWithInvalidRatesClampsToZero() {
+        Crop crop = wheat();
+        assertEquals(0.0, growthService.calculateGrowthDelta(crop, 1.0,
+                new GrowthRates(-0.5, 1.0, 1.0)), 1e-9);
+        assertEquals(0.0, growthService.calculateGrowthDelta(crop, 1.0,
+                new GrowthRates(Double.NaN, 1.0, 1.0)), 1e-9);
+        assertEquals(0.0, growthService.calculateGrowthDelta(crop, 1.0,
+                new GrowthRates(1.0, 1.0, Double.NaN)), 1e-9);
+    }
+
+    /**
+     * 4 参 WITHERED 守卫（A 模块设计文档 §6.3 延续）：枯萎作物
+     * applyGrowth 后 progress/stage 均不变。
+     */
+    @Test
+    void applyGrowthWithRatesAndWitheredCropKeepsProgressAndStage() {
+        Crop crop = wheat();
+        crop.setGrowthProgress(40.0);
+        crop.setGrowthStage(GrowthStage.WITHERED);
+
+        growthService.applyGrowth(crop, 1.0, new GrowthRates(1.0, 1.0, 2.0));
+
+        assertEquals(40.0, crop.getGrowthProgress(), 1e-9);
+        assertEquals(GrowthStage.WITHERED, crop.getGrowthStage());
+    }
+
+    /**
+     * 浇水加成 × 三率连乘（验收规范 §四十九 + §二十四）：manualWaterCount=1（+5%）
+     * × rates(0.5, 1.5, 2.0) → 50 × 0.5 × 1.5 × 2.0 × 1.05 = 78.75。
+     */
+    @Test
+    void calculateGrowthDeltaWithWaterBonusAndRates() {
+        Crop crop = wheat();
+        crop.setManualWaterCount(1);
+        assertEquals(78.75, growthService.calculateGrowthDelta(crop, 1.0,
+                new GrowthRates(0.5, 1.5, 2.0)), 1e-9);
     }
 }

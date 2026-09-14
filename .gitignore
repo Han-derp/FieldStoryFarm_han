@@ -44,3 +44,6 @@ logs/
 
 # AI 临时目录
 .qoder-temp/
+
+# 第三方素材原始包（仅拷贝所需文件到 src/main/resources/assets/）
+/SuperRetroRanch/
