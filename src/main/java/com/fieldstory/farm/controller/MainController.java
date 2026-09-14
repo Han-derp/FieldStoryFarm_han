@@ -23,6 +23,7 @@ import com.fieldstory.farm.persistence.SaveSlotInfo;
 import com.fieldstory.farm.service.BuffService;
 import com.fieldstory.farm.service.CollectionService;
 import com.fieldstory.farm.service.DecorationService;
+import com.fieldstory.farm.service.FarmRankService;
 import com.fieldstory.farm.service.FarmScoreService;
 import com.fieldstory.farm.service.GraduationService;
 import com.fieldstory.farm.service.GrowthService;
@@ -44,6 +45,7 @@ import com.fieldstory.farm.service.economy.impl.EconomyServiceImpl;
 import com.fieldstory.farm.service.impl.BasicBuffService;
 import com.fieldstory.farm.service.impl.BasicCollectionService;
 import com.fieldstory.farm.service.impl.BasicDecorationService;
+import com.fieldstory.farm.service.impl.BasicFarmRankService;
 import com.fieldstory.farm.service.impl.BasicFarmScoreService;
 import com.fieldstory.farm.service.impl.BasicGraduationService;
 import com.fieldstory.farm.service.impl.BasicGrowthService;
@@ -60,6 +62,7 @@ import com.fieldstory.farm.service.impl.BasicWitherService;
 import com.fieldstory.farm.util.GameConstants;
 import com.fieldstory.farm.util.RandomProvider;
 import com.fieldstory.farm.view.BusinessToolbarView;
+import com.fieldstory.farm.view.CollectionPopupView;
 import com.fieldstory.farm.view.DecorationOverlayView;
 import com.fieldstory.farm.view.FarmView;
 import com.fieldstory.farm.view.StatusView;
@@ -410,7 +413,11 @@ public class MainController {
 
         // D 状态栏保持原实现；B 经营入口作为独立节点由 E 装配。
         StatusView statusView = new StatusView(model, player);
-        buildTopBar(statusView, businessToolbar);
+        // E P3：图鉴入口聚合收集 / FarmScore / FarmRank / 套装四个服务（验收规范 §一百二十七）。
+        FarmRankService farmRankService = new BasicFarmRankService();
+        CollectionController collectionController = new CollectionController(
+                collectionService, farmScoreService, farmRankService, setService);
+        buildTopBar(statusView, businessToolbar, collectionController);
 
         // 主循环：沿用当前主干的天气 + 枯萎 + 成长流程。
         lastGrowthDay = model.getGameClock().getGameDay();
@@ -622,6 +629,16 @@ public class MainController {
      * 构建常驻顶栏：D 状态栏 + B 经营入口 + E 保存按钮 + 提示。
      */
     void buildTopBar(StatusView statusView, Node businessToolbar) {
+        buildTopBar(statusView, businessToolbar, null);
+    }
+
+    /**
+     * 构建常驻顶栏：D 状态栏 + B 经营入口 + E 保存/图鉴按钮 + 提示。
+     *
+     * <p>{@code collectionController} 为 {@code null} 时不挂「图鉴」入口
+     * （兼容既有仅顶栏的测试）；装配游戏闭环时传入，展开 E 的收集图鉴（验收规范 §一百二十七）。
+     */
+    void buildTopBar(StatusView statusView, Node businessToolbar, CollectionController collectionController) {
         Button saveButton = new Button("保存进度");
         saveButton.setOnAction(event -> onSaveButtonClick());
         styleMenuButton(saveButton, 104, 32);
@@ -633,7 +650,15 @@ public class MainController {
         if (businessToolbar != null) {
             topBar.getChildren().add(businessToolbar);
         }
-        topBar.getChildren().addAll(saveButton, topHintLabel);
+        topBar.getChildren().add(saveButton);
+        if (collectionController != null) {
+            CollectionPopupView collectionPopup = new CollectionPopupView(collectionController);
+            Button collectionButton = new Button("图鉴");
+            collectionButton.setOnAction(event -> collectionPopup.toggleBelow(collectionButton));
+            styleMenuButton(collectionButton, 88, 32);
+            topBar.getChildren().add(collectionButton);
+        }
+        topBar.getChildren().add(topHintLabel);
         topBar.setAlignment(Pos.CENTER_LEFT);
         topBar.setPadding(new Insets(6, 12, 6, 12));
 
