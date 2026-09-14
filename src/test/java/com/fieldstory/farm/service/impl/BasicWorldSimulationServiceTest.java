@@ -270,6 +270,78 @@ class BasicWorldSimulationServiceTest {
         assertEquals(GrowthStage.WITHERED, crop.getGrowthStage());
     }
 
+    // ===== 6. 决策 D31：逐 Crop 装饰倍率解析 =====
+
+    /**
+     * 决策 D31：resolver 逐株返回不同 DecorationRate（规则 §五十五：
+     * D01 邻格 / D08~D10 作物专属使同段内各株倍率不同）——
+     * (2,2) 1.5、(2,3) 1.0，增量按各自倍率计算。
+     */
+    @Test
+    void growSegmentResolvesPerCropDecorationRate() {
+        Farm farm = new BasicFarm();
+        Crop boosted = plantOn(farm, 2, 2, GrowthStage.SPROUT, 30.0);
+        Crop plain = plantOn(farm, 2, 3, GrowthStage.SPROUT, 30.0);
+
+        List<Crop> matured = simulation.growSegment(farm, 12.0, GrowthRates.P0,
+                (row, column, cropType) -> row == 2 && column == 2 ? 1.5 : 1.0);
+
+        assertTrue(matured.isEmpty());
+        assertEquals(30.0 + 100.0 / 3.0 * 0.5 * 1.5, boosted.getGrowthProgress(), 1e-6,
+                "决策 D31：(2,2) 按解析出的 1.5 成长");
+        assertEquals(30.0 + 100.0 / 3.0 * 0.5, plain.getGrowthProgress(), 1e-6,
+                "决策 D31：(2,3) 按解析出的 1.0 成长");
+    }
+
+    /**
+     * 决策 D31：resolver 为 null 回退 3 参行为——全部作物统一用
+     * rates.decorationRate()（与 3 参调用语义完全一致）。
+     */
+    @Test
+    void growSegmentNullResolverFallsBackToUniformRate() {
+        Farm farm = new BasicFarm();
+        Crop first = plantOn(farm, 2, 2, GrowthStage.SPROUT, 30.0);
+        Crop second = plantOn(farm, 2, 3, GrowthStage.SPROUT, 30.0);
+
+        GrowthRates rates = new GrowthRates(1.0, 1.5, 1.0);
+        simulation.growSegment(farm, 12.0, rates, null);
+
+        double expected = 30.0 + 100.0 / 3.0 * 0.5 * 1.5;
+        assertEquals(expected, first.getGrowthProgress(), 1e-6,
+                "决策 D31：null resolver 回退三件套统一 decorationRate=1.5");
+        assertEquals(expected, second.getGrowthProgress(), 1e-6);
+    }
+
+    /**
+     * 决策 D31：resolver 返回非法值（NaN / 负数）经 GrowthRates 钳制为 0，
+     * 该株成长暂停、其余株不受影响（异常输入不破坏状态）。
+     */
+    @Test
+    void growSegmentClampsIllegalResolverValues() {
+        Farm farm = new BasicFarm();
+        Crop nanCrop = plantOn(farm, 2, 2, GrowthStage.SPROUT, 30.0);
+        Crop negativeCrop = plantOn(farm, 2, 3, GrowthStage.SPROUT, 30.0);
+        Crop normalCrop = plantOn(farm, 2, 4, GrowthStage.SPROUT, 30.0);
+
+        simulation.growSegment(farm, 12.0, GrowthRates.P0,
+                (row, column, cropType) -> {
+                    if (column == 2) {
+                        return Double.NaN;
+                    }
+                    if (column == 3) {
+                        return -0.5;
+                    }
+                    return 1.0;
+                });
+
+        assertEquals(30.0, nanCrop.getGrowthProgress(), 1e-9,
+                "NaN 钳制为 0：成长暂停");
+        assertEquals(30.0, negativeCrop.getGrowthProgress(), 1e-9,
+                "负数钳制为 0：成长暂停");
+        assertEquals(30.0 + 100.0 / 3.0 * 0.5, normalCrop.getGrowthProgress(), 1e-6,
+                "其余株不受影响");
+    }
+
     // ===== 测试内 stub（随机注入控制，决策 D18/D19）=====
 
     /** 天气 stub：按调用顺序返回预设序列，取尽停最后一值。 */

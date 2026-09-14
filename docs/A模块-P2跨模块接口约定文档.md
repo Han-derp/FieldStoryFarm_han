@@ -4,7 +4,7 @@
 > 负责人：A（lyj）· 土地与作物模块
 > 依据：《FSF_P0-P4功能实现与验收规范》§八十八/§八十九、《概要设计说明书-lyj.md》§6.3、《模块分工.md》第 4 行、决策 D14/D18/D19/D24/D29/D30
 > 约束：A 模块**不修改** B/C/D/E 模块的类，本文件仅提出接口约定，需其他模块修改的部分以本文档形式提出。
-> 冻结声明：`WorldSimulationService` 两个方法签名自本文档发布起冻结，任何调整须先在团队同步，不得单方变更。
+> 冻结声明：`WorldSimulationService` 两个方法签名自本文档发布起冻结，任何调整须先在团队同步，不得单方变更；D31 起新增 `growSegment` 4 参 default 重载（加法式扩展，两个既有签名不变）。
 
 ---
 
@@ -13,12 +13,14 @@
 | 接口/记录 | 签名 | 说明 |
 |---|---|---|
 | `WorldSimulationService` | `List<Crop> growSegment(Farm farm, double gameHours, GrowthRates rates)` | 分段成长：全部 PLANTED 作物按 `gameHours / 24` 折算天数成长，返回本段新成熟作物；不判枯萎、不换天气（验收 §八十八/§二十五） |
+| `WorldSimulationService` | `default List<Crop> growSegment(Farm farm, double gameHours, GrowthRates rates, DecorationRateResolver decorationResolver)` | 4 参重载（决策 D31）：逐株 PLANTED 作物经 resolver 解析 DecorationRate（规则 §五十五）；weatherRate/eventRate 仍取 rates；resolver 为 null 回退 3 参统一值 |
+| `DecorationRateResolver` | `double decorationRate(int row, int column, CropType cropType)` | 逐 Crop 装饰倍率解析器（B 实现，装饰是 B 的领域）；非法值经 GrowthRates 钳制为 0 |
 | `WorldSimulationService` | `DailySimulationResult settleDay(Farm farm, DaySettlementInput input)` | 每日结算：严格按 §八十九 14 步执行，返回当日摘要；只产数据（决策 D24） |
 | `DaySettlementInput` | `record(long gameDay, long worldTimeAtSettle, WeatherType weather, EventType eventInEffect, GrowthRates rates, double witherMitigationRate, List<Double> witherRolls)` | 一次日结的全部入参；不可变记录 + 防御性钳制 |
 | `DailySimulationResult` | `record(long gameDay, WeatherType weather, EventType event, int maturedCount, int witheredCount, int rainHydratedCount)` | 当日结算摘要 = §八十九 第⑨步 DailyLog 数据体 |
 | `GrowthRates` | `record(double weatherRate, double decorationRate, double eventRate)` | 成长倍率三件套；`P0 = 全 1.0`；非法值钳制为 0 |
 
-实现：`BasicWorldSimulationService`（210 行）；单测 `BasicWorldSimulationServiceTest`（10 用例，2026-09-14 实测全绿）。
+实现：`BasicWorldSimulationService`（231 行）；单测 `BasicWorldSimulationServiceTest`（13 用例，2026-09-14 实测全绿，含 D31 逐株倍率/回退/钳制三例）。
 
 **纯函数约束（决策 D18/D19 精神延续）**：引擎不依赖 `GameClock`、不读系统时间、不调用 `RandomProvider`——时间与掷骰值全部由调用方传入；天气/事件抽取由注入的 D 模块 `WeatherService`/`EventService` 内部完成。
 
@@ -46,7 +48,9 @@ gameHours = min(rawOfflineMinutes, 72)        // 72 现实分钟上限（概要�
                                               // 1 现实分钟 = 1 游戏小时（规则 §5.1）
 while (gameHours > 0):
     segment = 按 min(下一 00:00 边界, 下一事件结束时间, 下一作物成熟时间) 切段（验收 §八十八）
-    growSegment(farm, segment.hours, rates)    // 段内成长；gameHours 为 double
+    growSegment(farm, segment.hours, rates,           // 段内成长；gameHours 为 double
+        (row, column, cropType) ->                    // D31：逐株装饰倍率（B 的 BuffService，
+            buffService.getGrowthRate(row, column, cropType))   // 规则 §五十五 完整 DecorationRate）
     if segment 到达日末切点:
         input = DaySettlementInput(
             gameDay,              // 当日游戏日（读 D 的 GameClock.getGameDay()）
@@ -80,6 +84,14 @@ while (gameHours > 0):
 - B 公开输入只保留 `long rawOfflineMinutes` —— **成立**。取值来源为 D 的 `GameClock.calculateOfflineDuration()`（返回 `long` 现实分钟，规则 §八/§九），B 不接触 `LocalDateTime`、不自造第二套世界时间类型。
 - 世界时间统一口径（决策 D14）：`worldTimeAtSettle = gameDay * 24 + gameHour`（`long` 游戏小时），与 `Crop.plantWorldTime`/`lastHydratedWorldTime` 同一口径。
 - 即使后续团队统一世界时间表达，B 的 `OfflineSimulationService` 输入 `rawOfflineMinutes` 无需推翻。
+
+### 2.5 逐 Crop DecorationRate（决策 D31）
+
+- 规则 §五十五：`DecorationRate = 1 + AdjacentBonus + GlobalBonus + CropSpecificBonus + SetBonus`（上限 1.5）——AdjacentBonus 按地块位置、CropSpecificBonus 按作物类型，DecorationRate **天然逐 Crop**；验收 §六十九 强制 D01/D08/D09/D10 真实效果，**不存在「P2 只消费全局装饰 Buff」的规则依据**。
+- A 的裁决：保留两个冻结签名；`growSegment` 新增 4 参 default 重载，实现层逐株调用 B 传入的 `DecorationRateResolver`，逐株组装 `GrowthRates(weatherRate, 逐株decorationRate, eventRate)` 后走既有 4 参 `applyGrowth`。
+- 4 参语义：`weatherRate`/`eventRate` 仍取 `rates`（全局按段组装）；`decorationRate` 由 resolver 逐株覆盖；resolver 传 null 回退 `rates.decorationRate()`（与 3 参完全一致）；非法值（<0 或 NaN）经 `GrowthRates` 钳制为 0。
+- B 侧一行 lambda 即可（B 的 `BuffService.getGrowthRate` 返回值即 §五十五 完整 DecorationRate，含 D01 邻格 + D05/D11 全局 + D08~D10 作物专属）：见 §2.2。B 不需要取最大值/平均值/第一株，也不需要忽略 D01/D08-D10。
+- 边界：`settleDay` 无需逐 Crop（成长只发生在 `growSegment`；枯萎抗性走独立的 `witherMitigationRate`，D06 通道）。在线白天逐 tick 成长（D 的 `advanceCrops` 3 参路径）不含 DecorationRate，属另一确认项。
 
 ---
 
@@ -146,6 +158,8 @@ A 实现：`settleDay` 返回值 `event` 为当日生效事件（与入参 `even
 | 72 现实分钟上限 | 《概要设计说明书-lyj.md》 | §6.3 |
 | 1 现实分钟 = 1 游戏小时 | 《FSF游戏规则设计文档.md》 | §5.1 |
 | 石灯笼枯萎抗性 0.7 | 《FSF游戏规则设计文档.md》 | §三十一 |
+| DecorationRate 逐 Crop 公式（1+Adjacent+Global+CropSpecific+SetBonus，上限 1.5） | 《FSF游戏规则设计文档.md》 | §五十五 |
+| D01/D05/D08/D09/D10 真实效果（禁止全局单值口径） | 《FSF_P0-P4功能实现与验收规范.md》 | §六十九 |
 | 世界时间统一 long（D14） | 《FSF项目需求分析与开发计划书.md》 | 决策 D14 |
 | A 只产数据不碰 DAO（D24） | 《FSF项目需求分析与开发计划书.md》 | 决策 D24 |
 | 引擎不读 GameClock/系统时间/RandomProvider | 《FSF项目需求分析与开发计划书.md》 | 决策 D18/D19 |

@@ -35,6 +35,26 @@ public interface WorldSimulationService {
     List<Crop> growSegment(Farm farm, double gameHours, GrowthRates rates);
 
     /**
+     * 分段成长（4 参重载，决策 D31）：逐株 PLANTED 作物经
+     * {@link DecorationRateResolver} 解析各自的 DecorationRate
+     * （规则 §五十五：1 + AdjacentBonus + GlobalBonus + CropSpecificBonus + SetBonus）。
+     *
+     * <p>装饰倍率逐株覆盖 {@code rates.decorationRate()}，weatherRate/eventRate
+     * 仍取 {@code rates}；{@code decorationResolver} 为 null 时回退 3 参行为
+     * （全部作物统一用 {@code rates.decorationRate()}，默认实现即此语义）。
+     *
+     * @param farm               农场
+     * @param gameHours          本段经过的游戏小时（验收 §二十五：支持非整日成长）
+     * @param rates              成长倍率三件套（weatherRate/eventRate 全局按段组装）
+     * @param decorationResolver 逐 Crop 装饰倍率解析器（B 提供实现；null 回退统一值）
+     * @return 本段新成熟（成长进度跨过 100）的作物列表；无则空列表
+     */
+    default List<Crop> growSegment(Farm farm, double gameHours, GrowthRates rates,
+            DecorationRateResolver decorationResolver) {
+        return growSegment(farm, gameHours, rates);
+    }
+
+    /**
      * 每日结算（验收 §八十九 14 步，规则 §八十一）。
      *
      * <p>严格按 §八十九 顺序执行：① 成长汇总 ② 更新阶段 ③ 标记成熟 ④ 日结边界
