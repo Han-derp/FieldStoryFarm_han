@@ -13,12 +13,14 @@ import com.fieldstory.farm.service.EventService;
 import com.fieldstory.farm.service.GrowthRates;
 import com.fieldstory.farm.service.GrowthService;
 import com.fieldstory.farm.service.WeatherService;
+import com.fieldstory.farm.service.WitherProbabilityMultiplierResolver;
 import com.fieldstory.farm.service.WitherResult;
 import com.fieldstory.farm.service.WitherService;
 import com.fieldstory.farm.service.WorldSimulationService;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * {@link WorldSimulationService} 基础实现（A 模块 P2：持续世界引擎；
@@ -118,15 +120,21 @@ public class BasicWorldSimulationService implements WorldSimulationService {
 
     @Override
     public DailySimulationResult settleDay(Farm farm, DaySettlementInput input) {
-        List<Crop> planted = plantedCrops(farm);
+        return settleDay(farm, input, null);
+    }
 
-        // §八十九 第 1 步：处理当前时间段成长 —— 今日成长已由 growSegment 完成，
-        // settleDay 内只做汇总，不重复结算成长
-        // §八十九 第 2 步：更新阶段 —— GrowthService.applyGrowth 已内建 stageOf
-        // （阈值 ≥20 SPROUT / ≥50 GROWING / ≥100 MATURE，验收 §二十二），无需重复
+    @Override
+    public DailySimulationResult settleDay(
+            Farm farm,
+            DaySettlementInput input,
+            WitherProbabilityMultiplierResolver witherResolver) {
+        List<Soil> plantedSoils = plantedSoils(farm);
+        List<Crop> planted = new ArrayList<>();
+        for (Soil soil : plantedSoils) {
+            planted.add(soil.getCrop());
+        }
 
-        // §八十九 第 3 步：标记成熟 —— progress ≥100 → maturedCount+1；
-        // 不收获、不自动出售（验收 §八十七：stage = MATURE，玩家返回后亲自点击收获）
+        // §八十九 第 1~3 步：成长已由 growSegment 完成；这里只汇总成熟状态。
         int maturedCount = 0;
         for (Crop crop : planted) {
             if (crop.getGrowthProgress() >= 100.0) {
@@ -134,72 +142,83 @@ public class BasicWorldSimulationService implements WorldSimulationService {
             }
         }
 
-        // §八十九 第 4 步：到达日结边界 —— worldTimeAtSettle 即当日日末切点（00:00），
-        // 由调用方（B 模块）按分段保证
-
-        // §八十九 第 5 步：处理补水 —— 有效补水判定（WitherService.isEffectivelyHydrated：
-        // 当日主动浇水成功 或 当日天气为 RAIN；规则 §二十九），内嵌于第 6 步调用的
-        // recordDailyWeather（DROUGHT 分支无有效补水 streak+1 否则归零）
-        // §八十九 第 6 步：更新 droughtStreak —— WitherService.recordDailyWeather
-        // 已内建 streak 逻辑，每 PLANTED 作物调用一次（规则 §二十一~§二十三；验收 §五十二）：
-        // RAIN → rainCount+1、lastHydratedWorldTime、streak=0（雨天自动补水）；
-        // DROUGHT → droughtCount+1，无有效补水 streak+1 否则归零；
-        // GREEN_RAIN → greenRainCount+1、streak=0；SUNNY → streak=0
+        // §八十九 第 5~6 步：记录当日天气、补水与 droughtStreak。
         for (Crop crop : planted) {
             witherService.recordDailyWeather(crop, input.weather(), input.gameDay(),
                     input.worldTimeAtSettle());
         }
-        // 当日雨天自动补水计数（规则 §二十一）：当日天气为 RAIN 时全部 PLANTED
-        // 作物均获补水（rainCount+1、streak=0）
         int rainHydratedCount = input.weather() == WeatherType.RAIN ? planted.size() : 0;
 
-        // §八十九 第 7 步：枯萎判定 —— 四条件（规则 §二十八：非 SEED、当日存在干旱风险、
-        // 没有有效补水、streak 达风险区间）；roll 从 witherRolls 按农场遍历顺序消费，
-        // 每次枯萎掷骰取下一个，取尽视为 1.0（必不枯萎，异常输入不破坏状态）
+        // §八十九 第 7 步：枯萎判定。
+        // A 不识别石灯笼或其他装饰，只消费 B 已算好的 witherProbabilityMultiplier。
         int witheredCount = 0;
-        for (int i = 0; i < planted.size(); i++) {
+        List<UUID> witherRiskCropUuids = new ArrayList<>();
+        for (int i = 0; i < plantedSoils.size(); i++) {
+            Soil soil = plantedSoils.get(i);
+            Crop crop = soil.getCrop();
             double roll = nextRoll(input.witherRolls(), i);
-            WitherResult result = witherService.judgeWither(planted.get(i), input.weather(),
-                    input.gameDay(), input.witherMitigationRate(), roll);
+            double witherMultiplier = resolveWitherMultiplier(
+                    soil, crop, input.witherMitigationRate(), witherResolver);
+            WitherResult result = witherService.judgeWither(
+                    crop,
+                    input.weather(),
+                    input.gameDay(),
+                    witherMultiplier,
+                    roll);
+            if ((result == WitherResult.SURVIVED || result == WitherResult.WITHERED)
+                    && crop.getCropUuid() != null) {
+                witherRiskCropUuids.add(crop.getCropUuid());
+            }
             if (result == WitherResult.WITHERED) {
                 witheredCount++;
             }
         }
 
-        // §八十九 第 8 步：关闭过期 Event —— currentWorldTime >= endWorldTime 时
-        // 重置为 NONE（规则 §八十一 第 ⑤ 步）
+        // §八十九 第 8 步：关闭过期事件。
         eventService.expireIfNeeded(input.worldTimeAtSettle());
 
-        // §八十九 第 9 步：保存 DailyLog —— 决策 D24：A 只产数据、不碰数据库与任何 DAO；
-        // 摘要（gameDay / weather / event / maturedCount / witheredCount / rainHydratedCount）
-        // 在方法末尾统一填入 DailySimulationResult 返回，落库由调用方（B/E）负责
-
-        // §八十九 第 10 步：GameDay+1 —— 结果记录 gameDay 为结算当日；
-        // A 不负责推进 D 的时钟（时钟推进由 B 模块 OfflineSimulationService 驱动）
-
-        // §八十九 第 11 步：生成新 Weather —— 概率 晴 40% / 雨 25% / 旱 20% / 绿雨 15%
-        // （规则 §十九），结果由 BasicWeatherService 写入 D 的 WeatherState
+        // §八十九 第 11 步：生成下一日天气。
         WeatherType newWeather = weatherService.rollDailyWeather((int) (input.gameDay() + 1));
 
-        // §八十九 第 12 步：雨天自动补水（规则 §八十一 第 ⑨ 步）——
-        // 决策 D30：只写 lastHydratedWorldTime（补水不计数），
-        // rainCount/greenRainCount/streak 一律在次日日结 ⑤⑥ recordDailyWeather 计数
-        // （每雨日 +1 一次，验收 §五十"累计雨日数"口径；待团队确认转交卡）
+        // §八十九 第 12 步：下一日为雨时，在 00:00 只写补水时刻；计数留到该雨日日结。
         if (newWeather == WeatherType.RAIN) {
             for (Crop crop : planted) {
                 crop.setLastHydratedWorldTime(input.worldTimeAtSettle());
             }
         }
 
-        // §八十九 第 13 步：抽取当天 Event —— 概率 74/5/8/10/3，一次随机抽取决定结果
-        // （规则 §四十七；验收 §九十），结果由 BasicEventService 写入 D 的 EventState
-        // 决策 D29：返回值不进当日摘要；次日 EventRate 由调用方读 EventState 组装
+        // §八十九 第 13 步：抽取下一日事件。
         eventService.rollDailyEvent((int) (input.gameDay() + 1));
 
-        // §八十九 第 14 步：继续下一日 —— 方法返回摘要，
-        // 循环由调用方（B 模块 OfflineSimulationService）驱动
-        return new DailySimulationResult(input.gameDay(), input.weather(),
-                input.eventInEffect(), maturedCount, witheredCount, rainHydratedCount);
+        return new DailySimulationResult(
+                input.gameDay(),
+                input.weather(),
+                input.eventInEffect(),
+                maturedCount,
+                witheredCount,
+                rainHydratedCount,
+                input.eventStartWorldTime(),
+                input.eventEndWorldTime(),
+                witherRiskCropUuids);
+    }
+
+    /**
+     * 逐株解析枯萎概率倍率；resolver 缺失时保持旧版统一倍率语义。
+     * 非法结果按项目既有倍率防御约定钳制为 0，避免 NaN 污染概率。
+     */
+    private static double resolveWitherMultiplier(
+            Soil soil,
+            Crop crop,
+            double fallbackRate,
+            WitherProbabilityMultiplierResolver resolver) {
+        if (resolver == null) {
+            return fallbackRate;
+        }
+        double rate = resolver.witherProbabilityMultiplier(
+                soil.getRow(),
+                soil.getColumn(),
+                crop.getCropType());
+        return (rate < 0.0 || Double.isNaN(rate)) ? 0.0 : rate;
     }
 
     /**
@@ -207,14 +226,16 @@ public class BasicWorldSimulationService implements WorldSimulationService {
      * （SoilState == PLANTED 且 crop != null，防御存档恢复异常）。
      * 该顺序即 witherRolls 的消费顺序。
      */
-    private List<Crop> plantedCrops(Farm farm) {
-        List<Crop> crops = new ArrayList<>();
+    private List<Soil> plantedSoils(Farm farm) {
+        List<Soil> soils = new ArrayList<>();
         for (Soil soil : farm.getSoils()) {
-            if (soil.getState() == SoilState.PLANTED && soil.getCrop() != null) {
-                crops.add(soil.getCrop());
+            if (soil != null
+                    && soil.getState() == SoilState.PLANTED
+                    && soil.getCrop() != null) {
+                soils.add(soil);
             }
         }
-        return crops;
+        return soils;
     }
 
     /**

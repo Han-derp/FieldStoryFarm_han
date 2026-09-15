@@ -101,6 +101,56 @@ final class ATileAssets {
     }
 
     /**
+     * P4 生产地图用满格地面贴图。旧 {@link #viewFor} 继续保留 32×32 与旧 viewport，
+     * 以免破坏 P1 的历史测试；正式 FarmView 使用本方法把贴图铺满 44×44 Tile。
+     *
+     * <p>免费素材图集中的农地帧本身带有细微边缘/色差。按行列做确定性选择，
+     * 可以打散“一整块纯色矩形”的观感，同时不引入随机状态。
+     */
+    static ImageView viewForTile(GroundVariant variant, int row, int column, double tileSize) {
+        if (variant == null || variant == GroundVariant.NONE || tileSize <= 0) {
+            return null;
+        }
+        GroundSpriteSheet sheet = GroundSpriteSheet.GROUND;
+        int[][] frames;
+        switch (variant) {
+            case GRASS -> frames = new int[][]{
+                    {2, 7}, {10, 1}, {4, 9}, {3, 6}
+            };
+            case TILLED -> frames = new int[][]{
+                    // 免费图集中的干净土壤内格。P4 不再使用圆角/条状 autotile，
+                    // 避免 8×8 农田拼成“砖墙/皮肤病”纹理。
+                    {5, 1}
+            };
+            case WET -> frames = new int[][]{
+                    // 湿地仍复用同一土壤帧，颜色差异由 FarmView 的表现层 ColorAdjust 给出。
+                    {5, 1}
+            };
+            default -> { return null; }
+        }
+        int index = Math.floorMod(row * 7 + column * 3, frames.length);
+        int col = frames[index][0];
+        int frameRow = frames[index][1];
+
+        Image image = CACHE.computeIfAbsent(sheet.getClasspath(), ATileAssets::loadUncached);
+        if (image == null) {
+            return null;
+        }
+        ImageView view = new ImageView(image);
+        view.setViewport(new Rectangle2D(
+                GroundSpriteSheet.frameX(col),
+                GroundSpriteSheet.frameY(frameRow),
+                GroundSpriteSheet.FRAME_SIZE,
+                GroundSpriteSheet.FRAME_SIZE));
+        view.setFitWidth(tileSize);
+        view.setFitHeight(tileSize);
+        view.setPreserveRatio(false);
+        view.setSmooth(false);
+        view.setMouseTransparent(true);
+        return view;
+    }
+
+    /**
      * 未命中缓存时按 classpath 同步加载全尺寸图集。
      *
      * <p>requestedWidth/Height 传 0 表示按原图实际尺寸解码（切片需要全尺寸图）；

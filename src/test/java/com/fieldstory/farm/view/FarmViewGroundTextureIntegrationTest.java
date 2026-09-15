@@ -24,21 +24,17 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@link FarmView} 地面贴图层接入集成测试（A 模块 P1 地面 Tile 美化渲染接入卡）。
+ * P4 地面贴图生产接入测试。
  *
- * <p>沿用 {@link FarmViewRestoreIntegrationTest} 的 Platform.startup + onFxThread
- * 模式，在 JavaFX 线程内走「农场模型 → FarmView 构造」真实链路：
- * 装饰区草地贴图（决策 D-G2 GRASS 变体）、耕地干/湿帧切换（决策 D-G2）、
- * 2× 放大格内居中（决策 D-G1）、NONE 变体隐藏（决策 D-G3）、
- * 去描边保留选中高亮（决策 D-G5）与 Z 序（tile → groundTexture → cropSprite）。
- *
- * <p>节点查找沿用 {@link FarmViewCropSpriteIntegrationTest} 的谓词遍历方式
- * （按位置/类型过滤 children），不依赖绝对索引。
+ * <p>P4 不再把 8×8 农田画成一个纯色大色块：每个 44×44 Tile 都由同一免费图集
+ * 的草地/干土/湿土帧铺满。模型状态没有改变：EMPTY/LOCKED 仍是原状态，
+ * MATURE/WITHERED 仍由底色表达状态，只是在上层叠半透明土壤纹理。
  */
 class FarmViewGroundTextureIntegrationTest {
 
@@ -73,7 +69,6 @@ class FarmViewGroundTextureIntegrationTest {
         return ref.get();
     }
 
-    /** 在指定格播种小麦（全局坐标，BasicFarm 中心种植区 2..9）。 */
     private static void plant(Farm farm, int row, int column, GrowthStage stage,
                               long lastManualWaterGameDay) {
         Soil soil = farm.getSoil(row, column);
@@ -86,20 +81,23 @@ class FarmViewGroundTextureIntegrationTest {
         soil.setCrop(crop);
     }
 
-    /** 谓词遍历：该格居中的可见地面贴图（决策 D-G1：x/y = col*44+6 / row*44+6）。 */
+    /** P4 地面层位于对应 44×44 格内；耕地允许为表现层留 1px 内缩边缘。 */
     private static ImageView groundAt(FarmView view, int row, int column) {
-        double x = column * FarmView.TILE_SIZE + (FarmView.TILE_SIZE - 32) / 2.0;
-        double y = row * FarmView.TILE_SIZE + (FarmView.TILE_SIZE - 32) / 2.0;
+        double left = column * FarmView.TILE_SIZE;
+        double top = row * FarmView.TILE_SIZE;
+        double right = left + FarmView.TILE_SIZE;
+        double bottom = top + FarmView.TILE_SIZE;
         return view.getChildren().stream()
                 .filter(ImageView.class::isInstance)
                 .map(ImageView.class::cast)
                 .filter(ImageView::isVisible)
-                .filter(iv -> iv.getX() == x && iv.getY() == y)
+                .filter(iv -> !"cropSprite".equals(iv.getUserData()))
+                .filter(iv -> iv.getX() >= left && iv.getX() < right
+                        && iv.getY() >= top && iv.getY() < bottom)
                 .findFirst()
                 .orElse(null);
     }
 
-    /** 谓词遍历：与指定格区域有交集的可见 ImageView（地面层 + 作物层）。 */
     private static List<ImageView> texturesIntersectingCell(FarmView view, int row, int column) {
         return view.getChildren().stream()
                 .filter(ImageView.class::isInstance)
@@ -112,7 +110,6 @@ class FarmViewGroundTextureIntegrationTest {
                 .collect(Collectors.toList());
     }
 
-    /** 谓词遍历：指定格 44×44 底色 tile（左上角定位、无居中偏移）。 */
     private static Rectangle tileAt(FarmView view, int row, int column) {
         return view.getChildren().stream()
                 .filter(Rectangle.class::isInstance)
@@ -124,7 +121,6 @@ class FarmViewGroundTextureIntegrationTest {
                 .orElse(null);
     }
 
-    /** 断言 viewport 为 (x, y, 16, 16)（地面图集单帧尺寸）。 */
     private static void assertViewport(ImageView view, double x, double y) {
         assertNotNull(view);
         Rectangle2D viewport = view.getViewport();
@@ -135,156 +131,157 @@ class FarmViewGroundTextureIntegrationTest {
         assertEquals(16, viewport.getHeight(), 0.0);
     }
 
-    /** 装饰区格：构造即显示草地贴图，32×32 居中（决策 D-G1），GRASS 帧 (48,96,16,16)。 */
     @Test
-    void decorationCellShowsCenteredGrassTexture() throws InterruptedException {
+    void decorationCellShowsFullTileGrassTexture() throws InterruptedException {
         onFxThread(() -> {
-            Farm farm = new BasicFarm();
-            FarmView view = assertDoesNotThrow(() -> new FarmView(farm));
-
-            ImageView ground = groundAt(view, 0, 0); // (0,0) 为外围装饰区
-            assertNotNull(ground, "装饰区格地面贴图可见");
-            assertEquals(32, ground.getFitWidth(), 0.0);
-            assertEquals(32, ground.getFitHeight(), 0.0);
-            assertEquals(0 * FarmView.TILE_SIZE + 6, ground.getX(), 0.0);
-            assertEquals(0 * FarmView.TILE_SIZE + 6, ground.getY(), 0.0);
-            assertViewport(ground, 48, 96); // GRASS：col3×16=48, row6×16=96
+            FarmView view = assertDoesNotThrow(() -> new FarmView(new BasicFarm()));
+            ImageView ground = groundAt(view, 0, 0);
+            assertNotNull(ground);
+            assertEquals(44, ground.getFitWidth(), 0.0);
+            assertEquals(44, ground.getFitHeight(), 0.0);
+            assertEquals(0, ground.getX(), 0.0);
+            assertEquals(0, ground.getY(), 0.0);
+            // P4 确定性草地帧：row0/col0 -> {2,7}。
+            assertViewport(ground, 32, 112);
             return null;
         });
     }
 
-    /** TILLED 格（干）：显示耕地干帧 (48,16,16,16)（决策 D-G2：无作物仅按 wetToday=false）。 */
     @Test
-    void tilledDryCellShowsTilledViewport() throws InterruptedException {
+    void tilledDryCellShowsDeterministicFieldTexture() throws InterruptedException {
         onFxThread(() -> {
             Farm farm = new BasicFarm();
             farm.getSoil(2, 2).setState(SoilState.TILLED);
-            FarmView view = assertDoesNotThrow(() -> new FarmView(farm));
-
-            assertViewport(groundAt(view, 2, 2), 48, 16); // TILLED：col3×16=48, row1×16=16
+            FarmView view = new FarmView(farm);
+            // P4 干净土壤内格统一使用 {5,1}，由每格轻微亮度差制造层次。
+            ImageView dry = groundAt(view, 2, 2);
+            assertViewport(dry, 80, 16);
+            assertEquals(42, dry.getFitWidth(), 0.0);
+            assertEquals(42, dry.getFitHeight(), 0.0);
+            assertEquals(2 * FarmView.TILE_SIZE + 1, dry.getX(), 0.0);
+            assertEquals(2 * FarmView.TILE_SIZE + 1, dry.getY(), 0.0);
             return null;
         });
     }
 
-    /** 同一 TILLED 格：setWetToday(true) + refreshAll 后切为湿地深色帧 (128,160,16,16)。 */
     @Test
-    void setWetTodayTrueThenRefreshAllShowsWetViewport() throws InterruptedException {
+    void setWetTodayTrueThenRefreshAllShowsWetFieldTexture() throws InterruptedException {
         onFxThread(() -> {
             Farm farm = new BasicFarm();
             farm.getSoil(2, 2).setState(SoilState.TILLED);
-            FarmView view = assertDoesNotThrow(() -> new FarmView(farm));
-
-            assertViewport(groundAt(view, 2, 2), 48, 16); // 湿前：干帧
-
+            FarmView view = new FarmView(farm);
             view.setWetToday(true);
             view.refreshAll();
-
-            assertViewport(groundAt(view, 2, 2), 128, 160); // WET：col8×16=128, row10×16=160
+            ImageView wet = groundAt(view, 2, 2);
+            assertViewport(wet, 80, 16);
+            assertEquals(42, wet.getFitWidth(), 0.0);
+            assertEquals(42, wet.getFitHeight(), 0.0);
+            assertNotNull(wet.getEffect(), "湿地应具有轻微冷/暗表现层效果");
             return null;
         });
     }
 
-    /** EMPTY 格：地面贴图不可见（决策 D-G3 保持木色纯色语义）。 */
     @Test
-    void emptyCellHidesGroundTexture() throws InterruptedException {
+    void emptyFarmCellUsesGrassTextureWithoutChangingModelState() throws InterruptedException {
         onFxThread(() -> {
             Farm farm = new BasicFarm();
-            FarmView view = assertDoesNotThrow(() -> new FarmView(farm));
-
-            assertNull(groundAt(view, 2, 2), "EMPTY 格不铺地面贴图");
+            assertEquals(SoilState.EMPTY, farm.getSoil(2, 2).getState());
+            FarmView view = new FarmView(farm);
+            assertNotNull(groundAt(view, 2, 2), "P4 EMPTY 视觉上铺草地，不再显示纯棕块");
+            assertEquals(SoilState.EMPTY, farm.getSoil(2, 2).getState(), "视觉层不得改状态机");
             return null;
         });
     }
 
-    /** PLANTED + 作物今日已浇（lastManualWaterGameDay == currentGameDay）→ WET 帧。 */
     @Test
-    void plantedWateredTodayShowsWetViewport() throws InterruptedException {
+    void plantedWateredTodayShowsWetTexture() throws InterruptedException {
         onFxThread(() -> {
             Farm farm = new BasicFarm();
-            plant(farm, 2, 2, GrowthStage.GROWING, 0L); // 今日已浇（决策 D14 long 用 ==）
-            FarmView view = assertDoesNotThrow(() -> new FarmView(farm));
+            plant(farm, 2, 2, GrowthStage.GROWING, 0L);
+            FarmView view = new FarmView(farm);
 
-            assertViewport(groundAt(view, 2, 2), 128, 160); // WET
+            ImageView wet = groundAt(view, 2, 2);
+            // P4 最终视觉方案：湿地与干地复用同一块干净土壤内格，
+            // 湿润差异由 FarmView 的 ColorAdjust 冷暗效果表达，
+            // 避免旧 wet frame 在 8x8 农田中形成突兀深色块。
+            assertViewport(wet, 80, 16);
+            assertEquals(42, wet.getFitWidth(), 0.0);
+            assertEquals(42, wet.getFitHeight(), 0.0);
+            assertNotNull(wet.getEffect(), "当天主动浇水后的 PLANTED 地块应显示湿润冷暗效果");
             return null;
         });
     }
 
-    /** PLANTED + MATURE：地面贴图不可见（决策 D-G3 保留整格高亮）。 */
     @Test
-    void plantedMatureHidesGroundTexture() throws InterruptedException {
+    void matureAndWitheredKeepStatusColorWithSubtleSoilTexture() throws InterruptedException {
         onFxThread(() -> {
-            Farm farm = new BasicFarm();
-            plant(farm, 2, 2, GrowthStage.MATURE, -1L);
-            FarmView view = assertDoesNotThrow(() -> new FarmView(farm));
+            Farm matureFarm = new BasicFarm();
+            plant(matureFarm, 2, 2, GrowthStage.MATURE, -1L);
+            FarmView matureView = new FarmView(matureFarm);
+            ImageView matureGround = groundAt(matureView, 2, 2);
+            assertNotNull(matureGround);
+            assertEquals(0.46, matureGround.getOpacity(), 0.0001);
+            assertEquals(FarmView.COLOR_HIGHLIGHT, tileAt(matureView, 2, 2).getFill());
 
-            assertNull(groundAt(view, 2, 2), "MATURE 格不铺地面贴图");
+            Farm witheredFarm = new BasicFarm();
+            plant(witheredFarm, 2, 2, GrowthStage.WITHERED, -1L);
+            FarmView witheredView = new FarmView(witheredFarm);
+            ImageView witheredGround = groundAt(witheredView, 2, 2);
+            assertNotNull(witheredGround);
+            assertEquals(0.46, witheredGround.getOpacity(), 0.0001);
+            assertEquals(FarmView.COLOR_WITHERED, tileAt(witheredView, 2, 2).getFill());
             return null;
         });
     }
 
-    /** PLANTED + WITHERED：地面贴图不可见（决策 D-G3 保留整格枯萎色）。 */
     @Test
-    void plantedWitheredHidesGroundTexture() throws InterruptedException {
+    void farmPlotTilesHaveNoStrokeAndSelectionStartsHidden() throws InterruptedException {
         onFxThread(() -> {
             Farm farm = new BasicFarm();
-            plant(farm, 2, 2, GrowthStage.WITHERED, -1L);
-            FarmView view = assertDoesNotThrow(() -> new FarmView(farm));
-
-            assertNull(groundAt(view, 2, 2), "WITHERED 格不铺地面贴图");
-            return null;
-        });
-    }
-
-    /** 去描边（决策 D-G5）：FARM_PLOT 格 tile 无描边，选中高亮描边保留。 */
-    @Test
-    void farmPlotTilesHaveNoStrokeWhileSelectionRectKeepsHighlight() throws InterruptedException {
-        onFxThread(() -> {
-            Farm farm = new BasicFarm();
-            FarmView view = assertDoesNotThrow(() -> new FarmView(farm));
+            FarmView view = new FarmView(farm);
 
             for (int row = BasicFarm.FARM_AREA_ORIGIN;
                  row < BasicFarm.FARM_AREA_ORIGIN + BasicFarm.FARM_AREA_SIZE; row++) {
                 for (int column = BasicFarm.FARM_AREA_ORIGIN;
                      column < BasicFarm.FARM_AREA_ORIGIN + BasicFarm.FARM_AREA_SIZE; column++) {
                     Rectangle tile = tileAt(view, row, column);
-                    assertNotNull(tile, "FARM_PLOT 格存在底色 tile");
-                    assertNull(tile.getStroke(), "tile 无 1px 描边（决策 D-G5）");
+                    assertNotNull(tile);
+                    assertNull(tile.getStroke(), "普通地块无测试期深色描边");
                 }
             }
+
             List<Rectangle> stroked = view.getChildren().stream()
                     .filter(Rectangle.class::isInstance)
                     .map(Rectangle.class::cast)
                     .filter(r -> r.getStroke() != null)
                     .collect(Collectors.toList());
-            assertEquals(1, stroked.size(), "仅选中高亮描边存在");
-            assertEquals(FarmView.COLOR_HIGHLIGHT, stroked.get(0).getStroke());
-            assertEquals(3, stroked.get(0).getStrokeWidth(), 0.0);
+            assertEquals(1, stroked.size(), "只有选中高亮矩形拥有描边");
+            Rectangle selection = stroked.get(0);
+            assertEquals(FarmView.COLOR_HIGHLIGHT, selection.getStroke());
+            assertEquals(3, selection.getStrokeWidth(), 0.0);
+            assertFalse(selection.isVisible(), "未选择地块时黄色框必须隐藏，不能固定出现在左上角");
             return null;
         });
     }
 
-    /** Z 序：PLANTED 格 groundTexture 索引小于 cropSprite 索引（tile → ground → crop）。 */
     @Test
     void groundTextureRendersBelowCropSprite() throws InterruptedException {
         onFxThread(() -> {
             Farm farm = new BasicFarm();
-            plant(farm, 2, 2, GrowthStage.GROWING, -1L); // 干：地面 TILLED + 作物 GROWING 均可见
-            FarmView view = assertDoesNotThrow(() -> new FarmView(farm));
+            plant(farm, 2, 2, GrowthStage.GROWING, -1L);
+            FarmView view = new FarmView(farm);
 
             List<ImageView> textures = texturesIntersectingCell(view, 2, 2);
-            assertEquals(2, textures.size(), "该格可见地面层 + 作物层两张贴图");
+            assertEquals(2, textures.size(), "该格应有地面层 + 作物层");
             ImageView ground = textures.stream()
-                    .filter(iv -> iv.getY() == 2 * FarmView.TILE_SIZE + 6)
-                    .findFirst()
-                    .orElse(null);
+                    .filter(iv -> !"cropSprite".equals(iv.getUserData()))
+                    .findFirst().orElse(null);
             ImageView crop = textures.stream()
-                    .filter(iv -> iv != ground)
-                    .findFirst()
-                    .orElse(null);
-            assertNotNull(ground, "找到地面贴图层");
-            assertNotNull(crop, "找到作物贴图层");
-            assertTrue(view.getChildren().indexOf(ground) < view.getChildren().indexOf(crop),
-                    "地面贴图渲染在作物贴图之下");
+                    .filter(iv -> "cropSprite".equals(iv.getUserData()))
+                    .findFirst().orElse(null);
+            assertNotNull(ground);
+            assertNotNull(crop);
+            assertTrue(view.getChildren().indexOf(ground) < view.getChildren().indexOf(crop));
             return null;
         });
     }

@@ -67,6 +67,7 @@ public final class BusinessToolbarView extends HBox {
 
         setSpacing(6);
         setAlignment(Pos.CENTER_RIGHT);
+        getStyleClass().add("business-toolbar");
 
         getChildren().addAll(
                 warehouseButton,
@@ -125,11 +126,7 @@ public final class BusinessToolbarView extends HBox {
                 )
         );
 
-        button.setStyle(
-                "-fx-background-color: #A97850;"
-                        + "-fx-background-radius: 10;"
-                        + "-fx-padding: 6;"
-        );
+        button.getStyleClass().addAll("primary-button", "icon-button");
 
         ImageView icon =
                 BImageAssets.view(
@@ -145,11 +142,7 @@ public final class BusinessToolbarView extends HBox {
                     fallbackText
             );
 
-            button.setStyle(
-                    button.getStyle()
-                            + "-fx-text-fill: #FFF3DD;"
-                            + "-fx-font-size: 12;"
-            );
+            button.getStyleClass().add("hint-text");
         }
 
         return button;

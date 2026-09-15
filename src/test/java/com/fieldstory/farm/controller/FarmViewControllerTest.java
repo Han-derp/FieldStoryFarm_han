@@ -11,6 +11,7 @@ import com.fieldstory.farm.model.impl.BasicCrop;
 import com.fieldstory.farm.model.impl.BasicFarm;
 import com.fieldstory.farm.model.impl.BasicGameClock;
 import com.fieldstory.farm.model.impl.BasicSoil;
+import com.fieldstory.farm.service.FertilizeResult;
 import com.fieldstory.farm.service.HarvestResult;
 import com.fieldstory.farm.service.LandService;
 import com.fieldstory.farm.service.PlantingResult;
@@ -84,9 +85,15 @@ class FarmViewControllerTest {
     }
 
      @Test
-    void actionsForPlantedIsWater() {
-        assertEquals(List.of(FarmAction.WATER),
+    void actionsForSproutHasWaterAndFertilize() {
+        assertEquals(List.of(FarmAction.WATER, FarmAction.FERTILIZE),
                 FarmViewController.actionsFor(plantedSoil(GrowthStage.SPROUT)));
+    }
+
+    @Test
+    void actionsForGrowingHasWaterAndFertilize() {
+        assertEquals(List.of(FarmAction.WATER, FarmAction.FERTILIZE),
+                FarmViewController.actionsFor(plantedSoil(GrowthStage.GROWING)));
     }
 
     @Test
@@ -109,9 +116,10 @@ class FarmViewControllerTest {
     }
 
     @Test
-    void actionsForLockedIsEmpty() {
-        // P0 不产生 LOCKED（验收规范 §十四），无可用动作
-        assertEquals(List.of(), FarmViewController.actionsFor(soil(SoilState.LOCKED)));
+    void actionsForLockedIsUnlockRequest() {
+        // A 只暴露点击事件出口；真正解锁由 B 模块完成。
+        assertEquals(List.of(FarmAction.REQUEST_UNLOCK),
+                FarmViewController.actionsFor(soil(SoilState.LOCKED)));
     }
 
     @Test
@@ -166,6 +174,20 @@ class FarmViewControllerTest {
         assertEquals("种子阶段还不能浇水", FarmViewController.actionMessageFor(WateringResult.SEED_STAGE));
         assertEquals("今天已经浇过水了", FarmViewController.actionMessageFor(WateringResult.ALREADY_WATERED_TODAY));
         assertEquals("这株作物已经不需要浇水了", FarmViewController.actionMessageFor(WateringResult.WATER_LIMIT_REACHED));
+    }
+
+    @Test
+    void actionMessageForFertilizeResults() {
+        assertEquals("施肥成功",
+                FarmViewController.actionMessageFor(FertilizeResult.SUCCESS));
+        assertEquals("只有幼苗或成长阶段可以施肥",
+                FarmViewController.actionMessageFor(FertilizeResult.NOT_ALLOWED_STAGE));
+        assertEquals("今天已经施过肥了",
+                FarmViewController.actionMessageFor(FertilizeResult.ALREADY_FERTILIZED_TODAY));
+        assertEquals("这株作物一生最多施肥3次",
+                FarmViewController.actionMessageFor(FertilizeResult.MAX_TIMES_PER_LIFE));
+        assertEquals("肥料不足",
+                FarmViewController.actionMessageFor(FertilizeResult.NOT_ENOUGH_FERTILIZER));
     }
 
     @Test

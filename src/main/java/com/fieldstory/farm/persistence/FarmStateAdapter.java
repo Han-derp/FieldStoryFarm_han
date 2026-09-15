@@ -137,6 +137,14 @@ public final class FarmStateAdapter {
             plot.setPlantWorldTime(Long.toString(crop.getPlantWorldTime()));
             plot.setManualWaterCount(crop.getManualWaterCount());
             plot.setLastManualWaterGameDay(Long.toString(crop.getLastManualWaterGameDay()));
+            plot.setFertilizerCount(crop.getFertilizerCount());
+            plot.setLastFertilizedGameDay(Long.toString(crop.getLastFertilizedGameDay()));
+            plot.setDroughtCount(crop.getDroughtCount());
+            plot.setRainCount(crop.getRainCount());
+            plot.setGreenRainCount(crop.getGreenRainCount());
+            plot.setLastHydratedWorldTime(Long.toString(crop.getLastHydratedWorldTime()));
+            plot.setDroughtStreak(crop.getDroughtStreak());
+            plot.setEventCount(crop.getEventCount());
         }
         return plot;
     }
@@ -151,6 +159,14 @@ public final class FarmStateAdapter {
         crop.setPlantWorldTime(parseLong(plot.getPlantWorldTime(), 0L));
         crop.setManualWaterCount(plot.getManualWaterCount());
         crop.setLastManualWaterGameDay(parseLong(plot.getLastManualWaterGameDay(), -1L));
+        crop.setFertilizerCount(plot.getFertilizerCount());
+        crop.setLastFertilizedGameDay(parseLong(plot.getLastFertilizedGameDay(), -1L));
+        crop.setDroughtCount(plot.getDroughtCount());
+        crop.setRainCount(plot.getRainCount());
+        crop.setGreenRainCount(plot.getGreenRainCount());
+        crop.setLastHydratedWorldTime(parseLong(plot.getLastHydratedWorldTime(), -1L));
+        crop.setDroughtStreak(plot.getDroughtStreak());
+        crop.setEventCount(plot.getEventCount());
         return crop;
     }
 

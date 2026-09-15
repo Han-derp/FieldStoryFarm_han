@@ -89,6 +89,30 @@ final class AImageAssets {
     }
 
     /**
+     * P4 生产地图用作物视图：保持原 viewport 逻辑，但把最终视觉尺寸限制在
+     * {@code maxSize × maxSize} 内并保持宽高比，避免 18×32 图集按旧 2× 规则
+     * 变成 36×64 后悬出 44px Tile。旧 {@link #viewFor} 保持不变，兼容既有测试。
+     */
+    static ImageView viewForTile(CropType type, GrowthStage stage, double maxSize) {
+        ImageView legacy = viewFor(type, stage);
+        if (legacy == null || legacy.getViewport() == null || maxSize <= 0) {
+            return legacy;
+        }
+        double frameWidth = legacy.getViewport().getWidth();
+        double frameHeight = legacy.getViewport().getHeight();
+        double scale = Math.min(maxSize / frameWidth, maxSize / frameHeight);
+
+        ImageView view = new ImageView(legacy.getImage());
+        view.setViewport(legacy.getViewport());
+        view.setFitWidth(Math.max(1, Math.floor(frameWidth * scale)));
+        view.setFitHeight(Math.max(1, Math.floor(frameHeight * scale)));
+        view.setPreserveRatio(false);
+        view.setSmooth(false);
+        view.setMouseTransparent(true);
+        return view;
+    }
+
+    /**
      * 未命中缓存时按 classpath 同步加载全尺寸图集。
      *
      * <p>requestedWidth/Height 传 0 表示按原图实际尺寸解码（切片需要全尺寸图）；

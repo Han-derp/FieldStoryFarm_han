@@ -67,4 +67,25 @@ public interface WorldSimulationService {
      * @return 每日结算摘要
      */
     DailySimulationResult settleDay(Farm farm, DaySettlementInput input);
+
+    /**
+     * 每日结算（逐 Crop 枯萎倍率重载）。
+     *
+     * <p>成长已经通过 {@link DecorationRateResolver} 逐株消费 B 的成长 Buff；
+     * 枯萎同样通过本重载逐株消费 B 的 {@code witherProbabilityMultiplier}。
+     * resolver 为 {@code null} 时回退 {@link DaySettlementInput#witherMitigationRate()}，
+     * 保持旧调用完全兼容。
+     *
+     * @param farm 农场
+     * @param input 日结入参
+     * @param witherResolver 逐 Crop 枯萎概率倍率解析器；null 回退 input 中统一倍率
+     * @return 每日结算摘要
+     */
+    default DailySimulationResult settleDay(
+            Farm farm,
+            DaySettlementInput input,
+            WitherProbabilityMultiplierResolver witherResolver) {
+        return settleDay(farm, input);
+    }
 }
+

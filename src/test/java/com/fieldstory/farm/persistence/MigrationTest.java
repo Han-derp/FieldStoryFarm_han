@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.Statement;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -170,6 +171,59 @@ class MigrationTest {
             assertNotNull(player, "结构升级后原有数据必须保留");
             assertEquals("老存档农夫", player.getName());
             assertEquals(123, player.getGold());
+        }
+    }
+
+    @Test
+    void v4DatabaseGainsRound2RuntimeColumnsWithoutLosingRows() throws Exception {
+        Path dbFile = tempDir.resolve("v4-to-v5.db");
+
+        // 构造真实 v4 形状：crop/crop_memory 都还没有第二轮新增字段。
+        try (Connection connection = DriverManager.getConnection(jdbcUrl(dbFile));
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("CREATE TABLE crop ("
+                    + "crop_uuid TEXT PRIMARY KEY, soil_id INTEGER NOT NULL, crop_type TEXT,"
+                    + "growth_stage TEXT, growth_progress REAL NOT NULL DEFAULT 0,"
+                    + "plant_world_time TEXT, manual_water_count INTEGER NOT NULL DEFAULT 0,"
+                    + "last_manual_water_game_day TEXT)");
+            statement.executeUpdate("INSERT INTO crop(crop_uuid, soil_id, crop_type, growth_stage,"
+                    + " growth_progress, plant_world_time, manual_water_count, last_manual_water_game_day)"
+                    + " VALUES('crop-v4', 22, 'WHEAT', 'SPROUT', 35.0, '80', 1, '2')");
+            statement.executeUpdate("CREATE TABLE crop_memory ("
+                    + "crop_uuid TEXT PRIMARY KEY, crop_type TEXT, plant_world_time INTEGER NOT NULL DEFAULT -1,"
+                    + "mature_world_time INTEGER NOT NULL DEFAULT -1, harvest_world_time INTEGER NOT NULL DEFAULT -1,"
+                    + "manual_water_count INTEGER NOT NULL DEFAULT 0, rain_count INTEGER NOT NULL DEFAULT 0,"
+                    + "drought_count INTEGER NOT NULL DEFAULT 0, green_rain_count INTEGER NOT NULL DEFAULT 0,"
+                    + "fertilizer_count INTEGER NOT NULL DEFAULT 0, last_drought_game_day INTEGER NOT NULL DEFAULT -1,"
+                    + "water_rescue INTEGER NOT NULL DEFAULT 0, events TEXT, wither_risk INTEGER NOT NULL DEFAULT 0,"
+                    + "quality TEXT, legendary INTEGER NOT NULL DEFAULT 0, final_story TEXT)");
+            statement.executeUpdate("INSERT INTO crop_memory(crop_uuid, crop_type, fertilizer_count)"
+                    + " VALUES('00000000-0000-0000-0000-000000000001', 'WHEAT', 2)");
+            statement.executeUpdate("PRAGMA user_version = 4");
+        }
+
+        DatabaseService database = new DatabaseService(dbFile);
+        try (Connection connection = database.openConnection();
+             Statement statement = connection.createStatement()) {
+            assertEquals(5, SchemaMigrator.readVersion(connection));
+
+            try (ResultSet crop = statement.executeQuery(
+                    "SELECT crop_uuid, fertilizer_count, last_fertilized_game_day, drought_streak,"
+                            + " last_hydrated_world_time FROM crop WHERE crop_uuid='crop-v4'")) {
+                assertTrue(crop.next(), "v4 原作物行不能在迁移中丢失");
+                assertEquals(0, crop.getInt("fertilizer_count"));
+                assertEquals("-1", crop.getString("last_fertilized_game_day"));
+                assertEquals(0, crop.getInt("drought_streak"));
+                assertEquals("-1", crop.getString("last_hydrated_world_time"));
+            }
+
+            try (ResultSet memory = statement.executeQuery(
+                    "SELECT fertilizer_count, last_fertilize_game_day FROM crop_memory"
+                            + " WHERE crop_uuid='00000000-0000-0000-0000-000000000001'")) {
+                assertTrue(memory.next(), "v4 CropMemory 行不能在迁移中丢失");
+                assertEquals(2, memory.getInt("fertilizer_count"));
+                assertEquals(-1, memory.getLong("last_fertilize_game_day"));
+            }
         }
     }
 

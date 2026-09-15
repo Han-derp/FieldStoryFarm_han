@@ -26,6 +26,7 @@ import com.fieldstory.farm.service.GrowthRates;
 import com.fieldstory.farm.service.GrowthService;
 import com.fieldstory.farm.service.WeatherService;
 import com.fieldstory.farm.service.WorldSimulationService;
+import com.fieldstory.farm.service.WitherProbabilityMultiplierResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -181,16 +182,20 @@ class BasicOfflineSimulationServiceTest {
     }
 
     @Test
-    void witherMitigationAndRollCountComeFromBAssembly() {
+    void witherMitigationIsResolvedPerCropAndRollCountComesFromBAssembly() {
         plant(CropType.WHEAT, 2, 2, GrowthStage.SPROUT, 30.0);
         plant(CropType.CORN, 2, 3, GrowthStage.SPROUT, 30.0);
         buffService = (row, column, cropType) -> new BuffSnapshot(
-                1.0, 0, 1.0, 0.70, 1.0, 1.0);
+                1.0, 0, 1.0, cropType == CropType.WHEAT ? 0.70 : 1.0, 1.0, 1.0);
 
         BasicOfflineSimulationService service = service();
         service.simulate(18L); // 第 1 天 06:00 → 次日 00:00，触发一次日结
 
-        assertEquals(List.of(0.70), worldSimulation.witherMitigationRates);
+        assertTrue(worldSimulation.usedPerCropWitherResolver,
+                "离线必须与在线共用逐 Crop wither resolver，不能压成全局最小倍率");
+        assertEquals(List.of(0.70, 1.0), worldSimulation.resolvedWitherMultipliers);
+        assertEquals(List.of(1.0), worldSimulation.witherMitigationRates,
+                "DaySettlementInput 只保留兼容回退值；正式离线应消费逐 Crop resolver");
         assertEquals(List.of(2), worldSimulation.witherRollCounts,
                 "witherRolls 必须按 Farm.getSoils() 中 PLANTED 作物数量准备");
     }
@@ -266,9 +271,11 @@ class BasicOfflineSimulationServiceTest {
         private final List<Long> settledDays = new ArrayList<>();
         private final List<Integer> clockMinutesAtSettlement = new ArrayList<>();
         private final List<Double> witherMitigationRates = new ArrayList<>();
+        private final List<Double> resolvedWitherMultipliers = new ArrayList<>();
         private final List<Integer> witherRollCounts = new ArrayList<>();
         private final List<EventType> eventsAtSettlement = new ArrayList<>();
         private boolean usedFourArgGrowSegment;
+        private boolean usedPerCropWitherResolver;
         private Crop matureOnFirstGrow;
 
         private RecordingWorldSimulationService(TestGameClock clock, EventService eventService) {
@@ -306,6 +313,15 @@ class BasicOfflineSimulationServiceTest {
 
         @Override
         public DailySimulationResult settleDay(Farm farm, DaySettlementInput input) {
+            return settleDay(farm, input, null);
+        }
+
+        @Override
+        public DailySimulationResult settleDay(
+                Farm farm,
+                DaySettlementInput input,
+                WitherProbabilityMultiplierResolver witherResolver) {
+            usedPerCropWitherResolver = witherResolver != null;
             settledDays.add(input.gameDay());
             eventsAtSettlement.add(input.eventInEffect());
             clockMinutesAtSettlement.add(clock.getTotalMinutes());
@@ -315,6 +331,10 @@ class BasicOfflineSimulationServiceTest {
             for (Soil soil : farm.getSoils()) {
                 if (soil.getState() == SoilState.PLANTED && soil.getCrop() != null) {
                     planted++;
+                    if (witherResolver != null && soil.getCrop().getCropType() != null) {
+                        resolvedWitherMultipliers.add(witherResolver.witherProbabilityMultiplier(
+                                soil.getRow(), soil.getColumn(), soil.getCrop().getCropType()));
+                    }
                 }
             }
             DailySimulationResult result = new DailySimulationResult(

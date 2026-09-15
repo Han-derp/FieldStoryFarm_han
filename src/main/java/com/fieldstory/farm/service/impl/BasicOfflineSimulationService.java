@@ -69,7 +69,7 @@ public final class BasicOfflineSimulationService implements OfflineSimulationSer
     private final EventService eventService;
     private final EventState eventState;
     private final BuffService buffService;
-    private final MemoryService memoryService;
+    private final CropMemoryFactRecorder memoryFactRecorder;
 
     /**
      * 兼容构造：完成离线模拟与日志事实收集，但不写 CropMemory。
@@ -117,7 +117,9 @@ public final class BasicOfflineSimulationService implements OfflineSimulationSer
         this.eventService = Objects.requireNonNull(eventService, "eventService");
         this.eventState = Objects.requireNonNull(eventState, "eventState");
         this.buffService = Objects.requireNonNull(buffService, "buffService");
-        this.memoryService = memoryService;
+        this.memoryFactRecorder = memoryService == null
+                ? null
+                : new CropMemoryFactRecorder(memoryService);
     }
 
     @Override
@@ -144,6 +146,9 @@ public final class BasicOfflineSimulationService implements OfflineSimulationSer
         Map<Long, DayAccumulator> dayAccumulators = new LinkedHashMap<>();
 
         while (currentWorldHour < endWorldHour) {
+            if (memoryFactRecorder != null) {
+                memoryFactRecorder.recordActiveEvent(farm, eventState);
+            }
             GrowthRates baseRates = currentGrowthRates(currentWorldHour);
             Long eventEndWorldHour = currentEventEndWorldHour(currentWorldHour);
             List<Long> cropMatureWorldHours = projectedMaturityCutPoints(
@@ -168,7 +173,9 @@ public final class BasicOfflineSimulationService implements OfflineSimulationSer
                     baseRates,
                     (row, column, cropType) ->
                             buffService.getGrowthRate(row, column, cropType));
-            recordMatureMemories(newlyMatured, nextWorldHour);
+            if (memoryFactRecorder != null) {
+                memoryFactRecorder.recordMatured(newlyMatured, nextWorldHour);
+            }
 
             DayAccumulator day = dayAccumulators.computeIfAbsent(
                     currentGameDay,
@@ -326,17 +333,27 @@ public final class BasicOfflineSimulationService implements OfflineSimulationSer
             weather = WeatherType.SUNNY;
         }
 
+        long eventStart = eventState.getStartWorldTime();
+        long eventEnd = eventState.getEndWorldTime();
+
         DaySettlementInput input = new DaySettlementInput(
                 gameDay,
                 worldTimeAtSettle,
                 weather,
                 eventInEffect,
+                eventStart,
+                eventEnd,
                 rates,
-                resolveWitherMitigationRate(),
+                1.0,
                 createWitherRolls());
 
-        DailySimulationResult result = worldSimulationService.settleDay(farm, input);
-        recordDailyMemories(result);
+        DailySimulationResult result = worldSimulationService.settleDay(
+                farm,
+                input,
+                buffService::getWitherProbabilityMultiplier);
+        if (memoryFactRecorder != null) {
+            memoryFactRecorder.recordDaily(farm, result);
+        }
 
         accumulator.recordWeather(result.weather());
         accumulator.recordEvent(result.event());
@@ -344,71 +361,6 @@ public final class BasicOfflineSimulationService implements OfflineSimulationSer
             accumulator.recordAutoWater(plantedByTypeBeforeSettlement);
         }
         accumulator.recordWithered(stagesBeforeSettlement, farm);
-    }
-
-    /** 将 A 产出的“刚成熟”事实同步到 CropMemory；不重新判断成熟条件。 */
-    private void recordMatureMemories(List<Crop> newlyMatured, long matureWorldTime) {
-        if (memoryService == null || newlyMatured == null) {
-            return;
-        }
-        for (Crop crop : newlyMatured) {
-            if (crop == null || crop.getCropUuid() == null) {
-                continue;
-            }
-            memoryService.findMemory(crop.getCropUuid())
-                    .or(() -> java.util.Optional.of(memoryService.createMemory(crop)))
-                    .ifPresent(memory -> memoryService.markMature(memory, matureWorldTime));
-        }
-    }
-
-    /**
-     * 将 A 的 DailySimulationResult 同步为 C 的生命经历。
-     * 这里只记录 result 已明确给出的天气/事件事实，不自行推导枯萎风险。
-     */
-    private void recordDailyMemories(DailySimulationResult result) {
-        if (memoryService == null || result == null) {
-            return;
-        }
-        for (Soil soil : farm.getSoils()) {
-            if (!isPlanted(soil)) {
-                continue;
-            }
-            Crop crop = soil.getCrop();
-            if (crop.getCropUuid() == null) {
-                continue;
-            }
-            var memory = memoryService.findMemory(crop.getCropUuid())
-                    .orElseGet(() -> memoryService.createMemory(crop));
-
-            switch (result.weather()) {
-                case RAIN -> memoryService.recordRain(memory);
-                case DROUGHT -> memoryService.recordDrought(memory, result.gameDay());
-                case GREEN_RAIN -> memoryService.recordGreenRain(memory);
-                case SUNNY -> {
-                    // 晴天没有独立计数字段。
-                }
-            }
-            if (result.event() != null && result.event() != EventType.NONE) {
-                memoryService.recordEvent(memory, result.event());
-            }
-        }
-    }
-
-    /** D06 石灯笼是当前唯一枯萎抗性装饰且为全局效果；通过 BuffService 读取，不复制装饰规则。 */
-    private double resolveWitherMitigationRate() {
-        double rate = 1.0;
-        for (Soil soil : farm.getSoils()) {
-            if (!isPlanted(soil) || soil.getCrop().getCropType() == null) {
-                continue;
-            }
-            rate = Math.min(
-                    rate,
-                    buffService.getWitherProbabilityMultiplier(
-                            soil.getRow(),
-                            soil.getColumn(),
-                            soil.getCrop().getCropType()));
-        }
-        return rate;
     }
 
     /** 按 Farm.getSoils() / A plantedCrops 同一顺序准备枯萎随机值。 */

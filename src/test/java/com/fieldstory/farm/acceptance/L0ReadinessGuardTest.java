@@ -3,7 +3,6 @@ package com.fieldstory.farm.acceptance;
 import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.EventState;
 import com.fieldstory.farm.model.EventType;
-import com.fieldstory.farm.model.GameClock;
 import com.fieldstory.farm.model.impl.BasicEventState;
 import com.fieldstory.farm.model.impl.BasicGameClock;
 import com.fieldstory.farm.persistence.DatabaseService;
@@ -167,8 +166,8 @@ class L0ReadinessGuardTest {
     void activeEventTableHasExactlyFiveSpecifiedColumns() throws Exception {
         DatabaseService db = new DatabaseService(tempDir.resolve("l0-schema.db"));
         try (Connection connection = db.openConnection()) {
-            assertEquals(4, SchemaMigrator.SCHEMA_VERSION,
-                    "结构版本应为 4（P2 日志表 + P3 收集/套装/毕业表）");
+            assertEquals(5, SchemaMigrator.SCHEMA_VERSION,
+                    "结构版本应为 5（v5 增加作物运行态/施肥持久化字段，且保留 P3 收集/套装/毕业表）");
             assertTrue(columnExists(connection, "active_event", "event_type"));
             assertTrue(columnExists(connection, "active_event", "start_world_time"));
             assertTrue(columnExists(connection, "active_event", "end_world_time"));

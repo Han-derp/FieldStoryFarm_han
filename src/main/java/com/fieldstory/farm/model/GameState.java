@@ -31,6 +31,12 @@ public class GameState {
      *  D 模块时钟接入前新档可为 null） */
     private String currentWorldTime;
 
+    /**
+     * 上次真实存档/退出时间（ISO-8601），对应 SQLite {@code world_state.last_real_time}。
+     * 新档或从未记录该字段的旧档为 null；离线时长由 GameClock 使用它计算。
+     */
+    private String lastRealTime;
+
     /** 已解锁内容标识集合（P3 土地解锁/商店接入后使用，P0 默认为空） */
     private final java.util.Set<String> unlocked = new java.util.LinkedHashSet<>();
 
@@ -119,6 +125,15 @@ public class GameState {
 
     public void setCurrentWorldTime(String currentWorldTime) {
         this.currentWorldTime = currentWorldTime;
+    }
+
+    /** 上次真实存档/退出时间（ISO-8601）；无记录返回 null。 */
+    public String getLastRealTime() {
+        return lastRealTime;
+    }
+
+    public void setLastRealTime(String lastRealTime) {
+        this.lastRealTime = lastRealTime;
     }
 
     /** 已解锁内容标识集合。 */

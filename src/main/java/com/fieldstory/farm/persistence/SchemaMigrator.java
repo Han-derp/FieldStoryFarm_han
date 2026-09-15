@@ -51,6 +51,9 @@ import java.util.List;
  *   <li>{@code graduation}：毕业状态单行表（FarmScore == 147 时写入）。</li>
  * </ul>
  *
+ * <p><b>第二轮收口 v5 增量：</b>补齐作物运行态施肥字段与 CropMemory 最近施肥日，
+ * 让“每日一次 / 生命周期三次 / 成长 +15%”在退出重进后仍保持一致。
+ *
  * <p><b>条件加列语法：</b>迁移语句以 {@value #ADD_COLUMN_PREFIX} 开头时表示"若该列不存在才加"，
  * 形如 {@code ADD COLUMN world_state.world_total_minutes INTEGER NOT NULL DEFAULT -1}。
  * SQLite 的 {@code ADD COLUMN} 在列已存在时会直接报错，而这个语法让迁移对
@@ -59,14 +62,14 @@ import java.util.List;
 public final class SchemaMigrator {
 
     /** 程序当前支持的数据库结构版本。新增表/字段时必须 +1 并追加迁移步骤。 */
-    public static final int SCHEMA_VERSION = 4;
+    public static final int SCHEMA_VERSION = 5;
 
     /** 「条件加列」语句前缀：列已存在时跳过，保证迁移幂等。 */
     static final String ADD_COLUMN_PREFIX = "ADD COLUMN ";
 
     /** 全部迁移步骤，按版本升序。 */
     private static final List<MigrationStep> STEPS =
-            List.of(stepToV1(), stepToV2(), stepToV3(), stepToV4());
+            List.of(stepToV1(), stepToV2(), stepToV3(), stepToV4(), stepToV5());
 
     private SchemaMigrator() {
         // 工具类，禁止实例化
@@ -308,6 +311,24 @@ public final class SchemaMigrator {
                         + " graduated INTEGER NOT NULL DEFAULT 0,"
                         + " graduation_world_time INTEGER NOT NULL DEFAULT -1,"
                         + " graduation_game_day INTEGER NOT NULL DEFAULT -1)"));
+    }
+
+    /**
+     * v4 → v5：第二轮封口——施肥运行态与记忆持久化。
+     *
+     * <p>旧档原地加列，默认值保持“从未施肥”；不重建 crop/crop_memory，避免丢档。
+     */
+    private static MigrationStep stepToV5() {
+        return new MigrationStep(5, List.of(
+                ADD_COLUMN_PREFIX + "crop.fertilizer_count INTEGER NOT NULL DEFAULT 0",
+                ADD_COLUMN_PREFIX + "crop.last_fertilized_game_day TEXT NOT NULL DEFAULT '-1'",
+                ADD_COLUMN_PREFIX + "crop.drought_count INTEGER NOT NULL DEFAULT 0",
+                ADD_COLUMN_PREFIX + "crop.rain_count INTEGER NOT NULL DEFAULT 0",
+                ADD_COLUMN_PREFIX + "crop.green_rain_count INTEGER NOT NULL DEFAULT 0",
+                ADD_COLUMN_PREFIX + "crop.last_hydrated_world_time TEXT NOT NULL DEFAULT '-1'",
+                ADD_COLUMN_PREFIX + "crop.drought_streak INTEGER NOT NULL DEFAULT 0",
+                ADD_COLUMN_PREFIX + "crop.event_count INTEGER NOT NULL DEFAULT 0",
+                ADD_COLUMN_PREFIX + "crop_memory.last_fertilize_game_day INTEGER NOT NULL DEFAULT -1"));
     }
 
     /** 单个迁移步骤：执行完 {@code version} 所列 DDL 后，库结构版本应等于 {@code version}。 */

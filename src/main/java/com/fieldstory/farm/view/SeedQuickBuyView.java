@@ -30,37 +30,6 @@ public final class SeedQuickBuyView extends VBox {
     private static final double BUTTON_WIDTH = 120.0;
     private static final double BUTTON_HEIGHT = 36.0;
 
-    private static final String PANEL_STYLE =
-            "-fx-background-color: #FFF3DD;"
-                    + "-fx-background-radius: 12;"
-                    + "-fx-border-color: #795548;"
-                    + "-fx-border-radius: 12;"
-                    + "-fx-border-width: 2;";
-
-    private static final String TEXT_STYLE =
-            "-fx-text-fill: #493526;"
-                    + "-fx-font-size: 14;";
-
-    private static final String TITLE_STYLE =
-            "-fx-text-fill: #493526;"
-                    + "-fx-font-size: 18;";
-
-    private static final String TIP_STYLE =
-            "-fx-text-fill: #493526;"
-                    + "-fx-font-size: 12;";
-
-    private static final String BUTTON_NORMAL_STYLE =
-            "-fx-background-color: #A97850;"
-                    + "-fx-background-radius: 10;"
-                    + "-fx-text-fill: #FFF3DD;"
-                    + "-fx-font-size: 16;";
-
-    private static final String BUTTON_HOVER_STYLE =
-            "-fx-background-color: #C28B5A;"
-                    + "-fx-background-radius: 10;"
-                    + "-fx-text-fill: #FFF3DD;"
-                    + "-fx-font-size: 16;";
-
     private final SeedQuickBuyController controller;
 
     private final Label goldLabel =
@@ -96,17 +65,18 @@ public final class SeedQuickBuyView extends VBox {
         setPrefWidth(PANEL_WIDTH);
         setMinWidth(PANEL_WIDTH);
 
-        setStyle(PANEL_STYLE);
+        getStyleClass().addAll("panel", "seed-quick-buy");
+        UiTheme.apply(this);
     }
 
     private void buildContent() {
 
         Label title =
                 new Label("种子快捷购买");
-        title.setStyle(TITLE_STYLE);
+        title.getStyleClass().add("section-title");
 
-        goldLabel.setStyle(TEXT_STYLE);
-        messageLabel.setStyle(TIP_STYLE);
+        goldLabel.getStyleClass().add("normal-text");
+        messageLabel.getStyleClass().add("hint-text");
         messageLabel.setWrapText(true);
 
         getChildren().add(title);
@@ -132,12 +102,12 @@ public final class SeedQuickBuyView extends VBox {
                                 + "种子"
                 );
 
-        nameLabel.setStyle(TEXT_STYLE);
+        nameLabel.getStyleClass().add("normal-text");
 
         Label countLabel =
                 new Label();
 
-        countLabel.setStyle(TEXT_STYLE);
+        countLabel.getStyleClass().add("normal-text");
 
         seedCountLabels.put(
                 type,
@@ -187,37 +157,7 @@ public final class SeedQuickBuyView extends VBox {
                 BUTTON_HEIGHT
         );
 
-        button.setStyle(
-                BUTTON_NORMAL_STYLE
-        );
-
-        button.setOnMouseEntered(
-                event ->
-                        button.setStyle(
-                                BUTTON_HOVER_STYLE
-                        )
-        );
-
-        button.setOnMouseExited(
-                event ->
-                        button.setStyle(
-                                BUTTON_NORMAL_STYLE
-                        )
-        );
-
-        button.setOnMousePressed(
-                event ->
-                        button.setStyle(
-                                BUTTON_HOVER_STYLE
-                        )
-        );
-
-        button.setOnMouseReleased(
-                event ->
-                        button.setStyle(
-                                BUTTON_NORMAL_STYLE
-                        )
-        );
+        button.getStyleClass().add("primary-button");
     }
 
     private void buy(CropType type) {

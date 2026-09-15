@@ -93,7 +93,7 @@ class FarmViewCropSpriteIntegrationTest {
         return sprites;
     }
 
-    /** WHEAT/GROWING：构造不抛，存在 visible 贴图且 fitWidth == 18*2（决策 D1 统一 2× 放大）。 */
+    /** WHEAT/GROWING：P4 生产贴图必须完整落在 40×40 内，并按格底部居中。 */
     @Test
     void growingWheatShowsScaledSprite() throws InterruptedException {
         onFxThread(() -> {
@@ -102,8 +102,15 @@ class FarmViewCropSpriteIntegrationTest {
 
             List<ImageView> sprites = visibleSprites(view);
             assertEquals(1, sprites.size(), "仅目标格显示贴图");
-            assertEquals(CropSpriteSheet.WHEAT.getFrameWidth() * AImageAssets.SCALE,
-                    sprites.get(0).getFitWidth(), 0.0);
+            ImageView sprite = sprites.get(0);
+            assertTrue(sprite.getFitWidth() <= 40, "作物宽度不得超过 UI 规范 40px");
+            assertTrue(sprite.getFitHeight() <= 40, "作物高度不得超过 UI 规范 40px");
+            // Wheat 18×32 帧按 max=40 等比缩放后为 floor(22.5)×40。
+            assertEquals(22, sprite.getFitWidth(), 0.0);
+            assertEquals(40, sprite.getFitHeight(), 0.0);
+            assertEquals(2 * FarmView.TILE_SIZE + (FarmView.TILE_SIZE - 22) / 2.0,
+                    sprite.getX(), 0.0);
+            assertEquals(3 * FarmView.TILE_SIZE - 40, sprite.getY(), 0.0);
             return null;
         });
     }

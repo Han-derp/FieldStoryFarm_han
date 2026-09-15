@@ -3,7 +3,6 @@ package com.fieldstory.farm.service.economy;
 import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.Player;
 import com.fieldstory.farm.model.economy.PurchaseResult;
-import com.fieldstory.farm.service.economy.EconomyService;
 
 import com.fieldstory.farm.service.economy.impl.EconomyServiceImpl;
 import org.junit.jupiter.api.BeforeEach;

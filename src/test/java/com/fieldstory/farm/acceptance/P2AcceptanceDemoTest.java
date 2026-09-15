@@ -1,7 +1,6 @@
 package com.fieldstory.farm.acceptance;
 
 import com.fieldstory.farm.manager.GameManager;
-import com.fieldstory.farm.model.Crop;
 import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.EventType;
 import com.fieldstory.farm.model.Farm;

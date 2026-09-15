@@ -16,7 +16,6 @@ import com.fieldstory.farm.model.item.Inventory;
 import com.fieldstory.farm.model.item.ItemType;
 import com.fieldstory.farm.service.impl.BasicHarvestTransactionService;
 import com.fieldstory.farm.service.impl.BasicLandService;
-import com.fieldstory.farm.service.impl.BasicLegendaryService;
 import com.fieldstory.farm.service.impl.BasicMemoryService;
 import com.fieldstory.farm.service.impl.BasicQualityService;
 import com.fieldstory.farm.testutil.TestEconomyService;

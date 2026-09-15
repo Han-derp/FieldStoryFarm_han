@@ -12,41 +12,18 @@ import com.fieldstory.farm.service.MemoryService;
 import java.util.Objects;
 
 /**
- * {@link FertilizerService} 基础实现（C 模块 品质与传说域，P1 施肥系统）。
+ * {@link FertilizerService} 基础实现。
  *
- * <p>规则文档 §二十六 / 验收规范 §六十三：
- * <ul>
- *   <li>允许阶段：SPROUT、GROWING（SEED 与 MATURE 不可施）；</li>
- *   <li>每株每天最多 1 次（按 {@link CropMemory#getLastFertilizeGameDay}
- *       判定，D14 口径 long 游戏日）；</li>
- *   <li>生命周期最多 3 次；</li>
- *   <li>每次消耗 1 肥料（B 的 {@link Inventory#consume}，库存不足不扣减）。</li>
- * </ul>
- *
- * <p>施肥效果双轨：
- * <ul>
- *   <li>品质 +8/次（上限 +24）：收获时 {@code BasicQualityService} 直接
- *       读记忆施肥次数计分（规则文档 §三十六），本服务无需额外处理；</li>
- *   <li>成长 +15%/次（上限 +45%）：经 {@link #fertilizerGrowthRate} 提供
- *       纯查询，由 A 的 GrowthService 接入（跨模块协作点）。</li>
- * </ul>
- *
- * <p>校验全部通过后一次性扣库存并落档；任何失败不产生变更
- * （规则文档 §六十八 事务原子性精神）。
+ * <p>Crop 保存当前生命周期施肥运行态，CropMemory 保存永久事实。施肥成功时两者同步更新；
+ * 成长公式只读 Crop，品质/传奇/故事继续读 Memory，避免成长链依赖已经“归档”的对象。
  */
 public class BasicFertilizerService implements FertilizerService {
 
     /** 每次施肥成长加成：+15%（规则文档 §二十六） */
     private static final double GROWTH_BONUS_PER_TIME = 0.15;
 
-    /** 记忆服务（施肥次数与施肥日落档） */
     private final MemoryService memoryService;
 
-    /**
-     * 注入记忆服务。
-     *
-     * @param memoryService 生命记忆服务（C 的 P2 服务）
-     */
     public BasicFertilizerService(MemoryService memoryService) {
         this.memoryService = Objects.requireNonNull(memoryService, "记忆服务不能为空");
     }
@@ -54,43 +31,56 @@ public class BasicFertilizerService implements FertilizerService {
     @Override
     public FertilizeResult fertilize(Crop crop, CropMemory memory,
                                      Inventory inventory, long gameDay) {
-        // ① 基础校验（作物与档案必须同时存在）
         if (crop == null || memory == null) {
             return FertilizeResult.NO_CROP_OR_MEMORY;
         }
 
-        // ② 阶段校验（规则文档 §二十六：仅 SPROUT / GROWING）
         GrowthStage stage = crop.getGrowthStage();
         if (stage != GrowthStage.SPROUT && stage != GrowthStage.GROWING) {
             return FertilizeResult.NOT_ALLOWED_STAGE;
         }
 
-        // ③ 每日 1 次校验（验收规范 §六十三；-1 哨兵 = 从未施肥）
-        if (memory.getLastFertilizeGameDay() == gameDay) {
+        // 读档迁移兜底：旧档可能只在 Memory 里有施肥次数；取两者较新事实做校验。
+        int effectiveCount = Math.max(crop.getFertilizerCount(), memory.getFertilizerCount());
+        long cropLastDay = crop.getLastFertilizedGameDay();
+        long memoryLastDay = memory.getLastFertilizeGameDay();
+        if (cropLastDay == gameDay || memoryLastDay == gameDay) {
             return FertilizeResult.ALREADY_FERTILIZED_TODAY;
         }
-
-        // ④ 生命周期 3 次校验（规则文档 §二十六）
-        if (memory.getFertilizerCount() >= MAX_FERTILIZE_PER_LIFE) {
+        if (effectiveCount >= MAX_FERTILIZE_PER_LIFE) {
             return FertilizeResult.MAX_TIMES_PER_LIFE;
         }
 
-        // ⑤ 库存校验 + 扣减（B 的 Inventory；null 或不足均视为无肥料）
         if (inventory == null || !inventory.consume(ItemType.FERTILIZER, FERTILIZER_COST)) {
             return FertilizeResult.NOT_ENOUGH_FERTILIZER;
         }
 
-        // ⑥ 落档：施肥次数 +1、记录施肥日（C 的 MemoryService 约定）
+        // 只有库存扣减成功后才提交状态，失败路径保持原子性。
+        int nextCount = effectiveCount + 1;
+        crop.setFertilizerCount(nextCount);
+        crop.setLastFertilizedGameDay(gameDay);
+
+        // Memory 可能来自旧档且次数落后：先对齐到 effectiveCount，再通过 MemoryService 记录事实。
+        memory.setFertilizerCount(effectiveCount);
         memoryService.recordFertilizer(memory);
         memory.setLastFertilizeGameDay(gameDay);
         return FertilizeResult.SUCCESS;
     }
 
     @Override
+    public double fertilizerGrowthRate(Crop crop) {
+        Objects.requireNonNull(crop, "作物不能为空");
+        return bonusForCount(crop.getFertilizerCount());
+    }
+
+    @Override
     public double fertilizerGrowthRate(CropMemory memory) {
         Objects.requireNonNull(memory, "档案不能为空");
-        int count = Math.max(0, memory.getFertilizerCount());
-        // 3 次封顶自然为 +45%（规则文档 §二十六"最多成长+45%"）
-        return Math.min(count, MAX_FERTILIZE_PER_LIFE) * GROWTH_BONUS_PER_TIME;
+        return bonusForCount(memory.getFertilizerCount());
+    }
+
+    private static double bonusForCount(int count) {
+        int normalized = Math.max(0, Math.min(count, MAX_FERTILIZE_PER_LIFE));
+        return normalized * GROWTH_BONUS_PER_TIME;
     }
 }

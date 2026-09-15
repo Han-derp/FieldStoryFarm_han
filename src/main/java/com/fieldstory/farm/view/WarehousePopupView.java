@@ -56,15 +56,8 @@ public final class WarehousePopupView
                         "我的装饰"
                 );
 
-        title.setStyle(
-                "-fx-text-fill: #493526;"
-                        + "-fx-font-size: 18;"
-        );
-
-        messageLabel.setStyle(
-                "-fx-text-fill: #493526;"
-                        + "-fx-font-size: 12;"
-        );
+        title.getStyleClass().add("section-title");
+        messageLabel.getStyleClass().add("hint-text");
 
         messageLabel.setWrapText(
                 true
@@ -83,9 +76,7 @@ public final class WarehousePopupView
                 360
         );
 
-        scroll.setStyle(
-                "-fx-background-color: transparent;"
-        );
+        scroll.getStyleClass().add("transparent-scroll");
 
         VBox root =
                 new VBox(
@@ -107,13 +98,8 @@ public final class WarehousePopupView
                 440
         );
 
-        root.setStyle(
-                "-fx-background-color: #FFF3DD;"
-                        + "-fx-background-radius: 12;"
-                        + "-fx-border-color: #8B5E3C;"
-                        + "-fx-border-radius: 12;"
-                        + "-fx-border-width: 2;"
-        );
+        root.getStyleClass().addAll("popup-panel", "warehouse-panel");
+        UiTheme.apply(root);
 
         getContent().add(
                 root
@@ -142,10 +128,7 @@ public final class WarehousePopupView
                             "（仓库暂无装饰）"
                     );
 
-            empty.setStyle(
-                    "-fx-text-fill: #493526;"
-                            + "-fx-font-size: 13;"
-            );
+            empty.getStyleClass().add("hint-text");
 
             listBox.getChildren()
                     .add(empty);
@@ -185,10 +168,7 @@ public final class WarehousePopupView
                         )
                 );
 
-        name.setStyle(
-                "-fx-text-fill: #493526;"
-                        + "-fx-font-size: 13;"
-        );
+        name.getStyleClass().add("normal-text");
 
         HBox.setHgrow(
                 name,
@@ -207,12 +187,7 @@ public final class WarehousePopupView
                 28
         );
 
-        action.setStyle(
-                "-fx-background-color: #A97850;"
-                        + "-fx-background-radius: 8;"
-                        + "-fx-text-fill: #FFF3DD;"
-                        + "-fx-font-size: 12;"
-        );
+        action.getStyleClass().addAll("primary-button", "small-button");
 
         action.setOnAction(
                 e -> {
@@ -266,6 +241,7 @@ public final class WarehousePopupView
         row.setPadding(
                 new Insets(3)
         );
+        row.getStyleClass().add("shop-row");
 
         return row;
     }
@@ -300,13 +276,7 @@ public final class WarehousePopupView
                 Pos.CENTER
         );
 
-        placeholder.setStyle(
-                "-fx-background-color: #FFF3DD;"
-                        + "-fx-background-radius: 8;"
-                        + "-fx-border-color: #795548;"
-                        + "-fx-border-radius: 8;"
-                        + "-fx-text-fill: #795548;"
-        );
+        placeholder.getStyleClass().add("icon-placeholder");
 
         return placeholder;
     }

@@ -49,6 +49,24 @@ public class PlotState {
     /** 最近一次主动浇水的游戏日（A 侧 long 游戏日，以十进制字符串保存；-1 表示从未浇水） */
     private String lastManualWaterGameDay;
 
+    /** 生命周期累计施肥次数。 */
+    private int fertilizerCount;
+
+    /** 最近一次施肥游戏日（十进制字符串；-1 表示从未施肥）。 */
+    private String lastFertilizedGameDay = "-1";
+
+    /** 累计干旱/雨/绿雨日数与连续干旱，均属于当前作物运行态。 */
+    private int droughtCount;
+    private int rainCount;
+    private int greenRainCount;
+    private int droughtStreak;
+
+    /** 最近一次有效补水世界小时；-1 表示无记录。 */
+    private String lastHydratedWorldTime = "-1";
+
+    /** 累计事件影响日数（当前 Crop 运行态）。 */
+    private int eventCount;
+
     public PlotState() {
         // 空构造供反序列化使用
     }
@@ -145,4 +163,69 @@ public class PlotState {
     public void setLastManualWaterGameDay(String lastManualWaterGameDay) {
         this.lastManualWaterGameDay = lastManualWaterGameDay;
     }
+
+    public int getFertilizerCount() {
+        return fertilizerCount;
+    }
+
+    public void setFertilizerCount(int fertilizerCount) {
+        this.fertilizerCount = Math.max(0, fertilizerCount);
+    }
+
+    public String getLastFertilizedGameDay() {
+        return lastFertilizedGameDay;
+    }
+
+    public void setLastFertilizedGameDay(String lastFertilizedGameDay) {
+        this.lastFertilizedGameDay = lastFertilizedGameDay;
+    }
+
+    public int getDroughtCount() {
+        return droughtCount;
+    }
+
+    public void setDroughtCount(int droughtCount) {
+        this.droughtCount = Math.max(0, droughtCount);
+    }
+
+    public int getRainCount() {
+        return rainCount;
+    }
+
+    public void setRainCount(int rainCount) {
+        this.rainCount = Math.max(0, rainCount);
+    }
+
+    public int getGreenRainCount() {
+        return greenRainCount;
+    }
+
+    public void setGreenRainCount(int greenRainCount) {
+        this.greenRainCount = Math.max(0, greenRainCount);
+    }
+
+    public int getDroughtStreak() {
+        return droughtStreak;
+    }
+
+    public void setDroughtStreak(int droughtStreak) {
+        this.droughtStreak = Math.max(0, droughtStreak);
+    }
+
+    public String getLastHydratedWorldTime() {
+        return lastHydratedWorldTime;
+    }
+
+    public void setLastHydratedWorldTime(String lastHydratedWorldTime) {
+        this.lastHydratedWorldTime = lastHydratedWorldTime;
+    }
+
+    public int getEventCount() {
+        return eventCount;
+    }
+
+    public void setEventCount(int eventCount) {
+        this.eventCount = Math.max(0, eventCount);
+    }
 }
+

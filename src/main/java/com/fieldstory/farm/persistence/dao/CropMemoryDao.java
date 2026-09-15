@@ -51,9 +51,9 @@ public class CropMemoryDao {
         try (PreparedStatement ps = connection.prepareStatement(
                 "INSERT INTO crop_memory(crop_uuid, crop_type, plant_world_time, mature_world_time,"
                         + " harvest_world_time, manual_water_count, rain_count, drought_count,"
-                        + " green_rain_count, fertilizer_count, last_drought_game_day, water_rescue,"
-                        + " events, wither_risk, quality, legendary, final_story)"
-                        + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                        + " green_rain_count, fertilizer_count, last_fertilize_game_day,"
+                        + " last_drought_game_day, water_rescue, events, wither_risk, quality, legendary, final_story)"
+                        + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                         + " ON CONFLICT(crop_uuid) DO UPDATE SET"
                         + " crop_type = excluded.crop_type,"
                         + " plant_world_time = excluded.plant_world_time,"
@@ -64,6 +64,7 @@ public class CropMemoryDao {
                         + " drought_count = excluded.drought_count,"
                         + " green_rain_count = excluded.green_rain_count,"
                         + " fertilizer_count = excluded.fertilizer_count,"
+                        + " last_fertilize_game_day = excluded.last_fertilize_game_day,"
                         + " last_drought_game_day = excluded.last_drought_game_day,"
                         + " water_rescue = excluded.water_rescue,"
                         + " events = excluded.events,"
@@ -81,13 +82,14 @@ public class CropMemoryDao {
             ps.setInt(8, memory.getDroughtCount());
             ps.setInt(9, memory.getGreenRainCount());
             ps.setInt(10, memory.getFertilizerCount());
-            ps.setLong(11, memory.getLastDroughtGameDay());
-            ps.setInt(12, memory.isWaterRescueOnDroughtDay() ? 1 : 0);
-            ps.setString(13, joinEvents(memory.getEvents()));
-            ps.setInt(14, memory.isWitherRisk() ? 1 : 0);
-            ps.setString(15, nameOf(memory.getQuality()));
-            ps.setInt(16, memory.isLegendary() ? 1 : 0);
-            ps.setString(17, memory.getFinalStory());
+            ps.setLong(11, memory.getLastFertilizeGameDay());
+            ps.setLong(12, memory.getLastDroughtGameDay());
+            ps.setInt(13, memory.isWaterRescueOnDroughtDay() ? 1 : 0);
+            ps.setString(14, joinEvents(memory.getEvents()));
+            ps.setInt(15, memory.isWitherRisk() ? 1 : 0);
+            ps.setString(16, nameOf(memory.getQuality()));
+            ps.setInt(17, memory.isLegendary() ? 1 : 0);
+            ps.setString(18, memory.getFinalStory());
             ps.executeUpdate();
         }
     }
@@ -144,7 +146,7 @@ public class CropMemoryDao {
     private static final String COLUMNS =
             "crop_uuid, crop_type, plant_world_time, mature_world_time, harvest_world_time,"
                     + " manual_water_count, rain_count, drought_count, green_rain_count,"
-                    + " fertilizer_count, last_drought_game_day, water_rescue, events,"
+                    + " fertilizer_count, last_fertilize_game_day, last_drought_game_day, water_rescue, events,"
                     + " wither_risk, quality, legendary, final_story";
 
     /** 行 → 档案；crop_uuid 非法时返回 null（跳过坏行，不阻断整次读档）。 */
@@ -170,6 +172,7 @@ public class CropMemoryDao {
         memory.setDroughtCount(rs.getInt("drought_count"));
         memory.setGreenRainCount(rs.getInt("green_rain_count"));
         memory.setFertilizerCount(rs.getInt("fertilizer_count"));
+        memory.setLastFertilizeGameDay(rs.getLong("last_fertilize_game_day"));
         memory.setLastDroughtGameDay(rs.getLong("last_drought_game_day"));
         memory.setWaterRescueOnDroughtDay(rs.getInt("water_rescue") != 0);
         memory.getEvents().addAll(splitEvents(rs.getString("events")));

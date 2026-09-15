@@ -6,7 +6,6 @@ import com.fieldstory.farm.model.GameState;
 import com.fieldstory.farm.model.Player;
 import com.fieldstory.farm.model.WeatherType;
 import com.fieldstory.farm.model.PlotState;
-import com.fieldstory.farm.model.WeatherType;
 import com.fieldstory.farm.persistence.dao.CropDao;
 import com.fieldstory.farm.persistence.dao.DecorationDao;
 import com.fieldstory.farm.persistence.dao.FarmDao;

@@ -26,30 +26,6 @@ import java.util.Objects;
  */
 public class CropQualityPanelView extends VBox {
 
-    /** 面板样式：UI背景 #FFF3DD + 木色 2px 边框 + 圆角 12（UI规范 §14、§16） */
-    private static final String PANEL_STYLE =
-            "-fx-background-color: #FFF3DD;"
-                    + "-fx-background-radius: 12;"
-                    + "-fx-border-color: #8B5E3C;"
-                    + "-fx-border-width: 2;"
-                    + "-fx-border-radius: 12;";
-
-    /** 面板标题：文字 #493526、18 号加粗（UI规范 §14 文字、§15 模块标题） */
-    private static final String TITLE_STYLE =
-            "-fx-text-fill: #493526;"
-                    + "-fx-font-size: 18;"
-                    + "-fx-font-weight: bold;";
-
-    /** 普通文字：文字 #493526、14 号（UI规范 §14、§15） */
-    private static final String TEXT_STYLE =
-            "-fx-text-fill: #493526;"
-                    + "-fx-font-size: 14;";
-
-    /** 提示文字：文字 #493526、12 号（UI规范 §14、§15 提示） */
-    private static final String TIP_STYLE =
-            "-fx-text-fill: #493526;"
-                    + "-fx-font-size: 12;";
-
     /** 数据源（只读查询：分项明细） */
     private final QualityService qualityService;
 
@@ -68,12 +44,13 @@ public class CropQualityPanelView extends VBox {
         this.qualityService = Objects.requireNonNull(qualityService, "品质服务不能为空");
         setSpacing(6);
         setPadding(new Insets(10));
-        setStyle(PANEL_STYLE);
+        getStyleClass().addAll("panel", "quality-panel");
+        UiTheme.apply(this);
 
         Label title = new Label("品质解释");
-        title.setStyle(TITLE_STYLE);
+        title.getStyleClass().add("section-title");
 
-        emptyLabel.setStyle(TIP_STYLE);
+        emptyLabel.getStyleClass().add("hint-text");
         emptyLabel.setWrapText(true);
         emptyLabel.setText("选择一株作物，查看它的品质评分来源。");
 
@@ -119,7 +96,7 @@ public class CropQualityPanelView extends VBox {
     /** 内部：按统一样式构建一行标签。 */
     private Label label(String text) {
         Label row = new Label(text);
-        row.setStyle(TEXT_STYLE);
+        row.getStyleClass().add("normal-text");
         row.setWrapText(true);
         return row;
     }

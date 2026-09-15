@@ -53,33 +53,19 @@ public final class DecorationShopView extends VBox {
         setPrefWidth(360);
         setMinWidth(360);
 
-        setStyle(
-                "-fx-background-color: #FFF3DD;"
-                        + "-fx-background-radius: 12;"
-                        + "-fx-border-color: #8B5E3C;"
-                        + "-fx-border-radius: 12;"
-                        + "-fx-border-width: 2;"
-        );
+        getStyleClass().addAll("panel", "shop-root");
+        UiTheme.apply(this);
 
         Label title =
                 new Label(
                         "装饰品商店"
                 );
 
-        title.setStyle(
-                "-fx-text-fill: #493526;"
-                        + "-fx-font-size: 18;"
-        );
+        title.getStyleClass().add("section-title");
 
-        goldLabel.setStyle(
-                "-fx-text-fill: #493526;"
-                        + "-fx-font-size: 14;"
-        );
+        goldLabel.getStyleClass().add("normal-text");
 
-        messageLabel.setStyle(
-                "-fx-text-fill: #493526;"
-                        + "-fx-font-size: 12;"
-        );
+        messageLabel.getStyleClass().add("hint-text");
 
         messageLabel.setWrapText(
                 true
@@ -107,9 +93,7 @@ public final class DecorationShopView extends VBox {
                 340
         );
 
-        scroll.setStyle(
-                "-fx-background-color: transparent;"
-        );
+        scroll.getStyleClass().add("transparent-scroll");
 
         VBox.setVgrow(
                 scroll,
@@ -140,10 +124,7 @@ public final class DecorationShopView extends VBox {
                         type.getDisplayName()
                 );
 
-        name.setStyle(
-                "-fx-text-fill: #493526;"
-                        + "-fx-font-size: 14;"
-        );
+        name.getStyleClass().add("normal-text");
 
         Label price =
                 new Label(
@@ -151,10 +132,7 @@ public final class DecorationShopView extends VBox {
                                 + " 金币"
                 );
 
-        price.setStyle(
-                "-fx-text-fill: #795548;"
-                        + "-fx-font-size: 12;"
-        );
+        price.getStyleClass().add("hint-text");
 
         info.getChildren().addAll(
                 name,
@@ -174,24 +152,7 @@ public final class DecorationShopView extends VBox {
                 36
         );
 
-        applyButtonStyle(
-                buy,
-                false
-        );
-
-        buy.setOnMouseEntered(
-                e -> applyButtonStyle(
-                        buy,
-                        true
-                )
-        );
-
-        buy.setOnMouseExited(
-                e -> applyButtonStyle(
-                        buy,
-                        false
-                )
-        );
+        buy.getStyleClass().add("primary-button");
 
         buy.setOnAction(
                 e -> {
@@ -228,6 +189,7 @@ public final class DecorationShopView extends VBox {
         row.setPadding(
                 new Insets(4)
         );
+        row.getStyleClass().add("shop-row");
 
         return row;
     }
@@ -262,33 +224,9 @@ public final class DecorationShopView extends VBox {
                 Pos.CENTER
         );
 
-        placeholder.setStyle(
-                "-fx-background-color: #FFF3DD;"
-                        + "-fx-background-radius: 8;"
-                        + "-fx-border-color: #795548;"
-                        + "-fx-border-radius: 8;"
-                        + "-fx-text-fill: #795548;"
-        );
+        placeholder.getStyleClass().add("icon-placeholder");
 
         return placeholder;
-    }
-
-    private void applyButtonStyle(
-            Button button,
-            boolean hover) {
-
-        button.setStyle(
-                "-fx-background-color: "
-                        + (
-                        hover
-                                ? "#C28B5A"
-                                : "#A97850"
-                )
-                        + ";"
-                        + "-fx-background-radius: 10;"
-                        + "-fx-text-fill: #FFF3DD;"
-                        + "-fx-font-size: 14;"
-        );
     }
 
     public void refresh() {

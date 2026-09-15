@@ -2,8 +2,10 @@ package com.fieldstory.farm.service.impl;
 
 import com.fieldstory.farm.model.Crop;
 import com.fieldstory.farm.model.CropMemory;
+import com.fieldstory.farm.model.EventType;
 import com.fieldstory.farm.model.GameClock;
 import com.fieldstory.farm.model.GrowthStage;
+import com.fieldstory.farm.model.HarvestLog;
 import com.fieldstory.farm.model.Quality;
 import com.fieldstory.farm.model.Soil;
 import com.fieldstory.farm.model.SoilState;
@@ -11,7 +13,8 @@ import com.fieldstory.farm.model.item.EventPriceRateProvider;
 import com.fieldstory.farm.model.item.Inventory;
 import com.fieldstory.farm.model.item.Item;
 import com.fieldstory.farm.model.item.ItemType;
-import com.fieldstory.farm.model.HarvestLog;
+import com.fieldstory.farm.service.BuffService;
+import com.fieldstory.farm.service.CollectionService;
 import com.fieldstory.farm.service.HarvestOutcome;
 import com.fieldstory.farm.service.HarvestResult;
 import com.fieldstory.farm.service.HarvestTransactionService;
@@ -22,6 +25,7 @@ import com.fieldstory.farm.service.LogService;
 import com.fieldstory.farm.service.MemoryService;
 import com.fieldstory.farm.service.QualityScoreInput;
 import com.fieldstory.farm.service.QualityService;
+import com.fieldstory.farm.service.SetService;
 import com.fieldstory.farm.service.economy.EconomyService;
 
 import java.util.Objects;
@@ -29,63 +33,44 @@ import java.util.Objects;
 /**
  * {@link HarvestTransactionService} 基础实现（C 模块 品质与传说域，P2）。
  *
- * <p>完整收获事务（验收规范 §一百零三 流程；规则文档 §六十八 18 步）：
- * 检查 MATURE → QualityService 计算 Score → LegendaryService 突破判定
- * → 确定 Quality（§一百零二）→ 售价 = 基础售价 × 品质倍率 × 事件倍率
- * → 发金币 → 发肥料 → 首次传说奖励（§六十七，可选依赖）→ 落档 CropMemory
- * + 生成生命故事 → 写入 HarvestLog（§六十八 ⑮，可选依赖）→ 清除土地 Crop
- * → Soil=TILLED。
+ * <p>严格执行 V4.0 §六十五/§六十八：
+ * <pre>
+ * FinalPrice = BasePrice × QualityMultiplier × DecorationPriceRate
+ *            × SetPriceRate × EventPriceRate
+ * </pre>
+ * 其中 DecorationPriceRate 只消费 B.BuffService，SetPriceRate 只消费
+ * {@link SetService#getPriceSetRate()}，二者绝不合并，避免套装重复计价。
  *
- * <p>事务原子性（规则文档 §六十八）：全部计算完成后才依次变更状态
- * （金币→肥料→记忆→土地），无效收获（未种植/无作物/未成熟）不产生
- * 任何变更（概要设计说明书 §11.1）。
- *
- * <p>跨模块依赖契约：
- * <ul>
- *   <li>金币入账经 B 的 {@link EconomyService#addGold}（B-P0-DESIGH "C 收获"）；</li>
- *   <li>土地回退经 A 的 {@link LandService#removeCropAndSetTilled}（决策 D09）；</li>
- *   <li>事件倍率经 {@link EventPriceRateProvider}（D 模块 EventService 接入，
- *       默认 {@code NONE} 恒 1.0）；</li>
- *   <li>时间经 {@link GameClock}（D 正式接口，决策 D14 口径
- *       worldTime = gameDay×24 + gameHour）。</li>
- * </ul>
+ * <p>品质分中的 DecorationScore 同样只消费 B.BuffService；事件品质分根据已经
+ * 写入 CropMemory 的真实事件经历计算。LEGENDARY 永远由 LegendaryService
+ * 突破产生，QualityService 的普通档位最高 EPIC。
  */
 public class BasicHarvestTransactionService implements HarvestTransactionService {
 
-    /** 世界时间换算：1 游戏日 = 24 游戏小时（规则 §5.1） */
     private static final int HOURS_PER_DAY = 24;
+    private static final int METEOR_QUALITY_BONUS = 20;
+    private static final int RAINBOW_DAY_QUALITY_BONUS = 15;
 
-    /** 经济服务（B 模块：基础售价读取与金币入账） */
     private final EconomyService economyService;
-
-    /** 土地服务（A 模块：作物移除与土地回退 TILLED，决策 D09） */
     private final LandService landService;
-
-    /** 品质服务（C：Score 计算与普通档位） */
     private final QualityService qualityService;
-
-    /** 传说服务（C：突破条件/概率/掷骰） */
     private final LegendaryService legendaryService;
-
-    /** 记忆服务（C：档案落档与故事生成） */
     private final MemoryService memoryService;
-
-    /** 世界时钟（D 模块正式接口，收获时刻来源） */
     private final GameClock gameClock;
-
-    /** 事件售价倍率提供者（D 模块实现；默认无事件倍率 1.0） */
     private final EventPriceRateProvider eventPriceRateProvider;
-
-    /** 首次传说奖励服务（C 的 P2 服务；null = 不发放首次奖励，向后兼容） */
     private final LegendaryFirstRewardService firstRewardService;
-
-    /** 收获日志服务（C 的 P2 服务；null = 不写日志，向后兼容） */
     private final LogService logService;
 
-    /**
-     * 便捷构造：事件倍率默认 {@link EventPriceRateProvider#NONE}（1.0），
-     * 不发放首次传说奖励、不写收获日志（P2 之前旧行为）。
-     */
+    /** B：装饰 Buff。null 时按旧行为使用中性值。 */
+    private final BuffService buffService;
+
+    /** B：套装服务。null 时按旧行为 SetPriceRate=1.0。 */
+    private final SetService setService;
+
+    /** E：图鉴。完整生产装配时由收获事务内部完成第 11 步。 */
+    private final CollectionService collectionService;
+
+    /** P2/旧测试兼容构造。 */
     public BasicHarvestTransactionService(EconomyService economyService,
                                           LandService landService,
                                           QualityService qualityService,
@@ -96,17 +81,7 @@ public class BasicHarvestTransactionService implements HarvestTransactionService
                 memoryService, gameClock, EventPriceRateProvider.NONE);
     }
 
-    /**
-     * 构造（P2 之前旧签名）：不发放首次传说奖励、不写收获日志。
-     *
-     * @param economyService        经济服务（B）
-     * @param landService           土地服务（A）
-     * @param qualityService        品质服务（C）
-     * @param legendaryService      传说服务（C）
-     * @param memoryService         记忆服务（C）
-     * @param gameClock             世界时钟（D）
-     * @param eventPriceRateProvider 事件售价倍率提供者（D）；null 视为 NONE
-     */
+    /** P2/旧测试兼容构造。 */
     public BasicHarvestTransactionService(EconomyService economyService,
                                           LandService landService,
                                           QualityService qualityService,
@@ -118,19 +93,7 @@ public class BasicHarvestTransactionService implements HarvestTransactionService
                 memoryService, gameClock, eventPriceRateProvider, null, null);
     }
 
-    /**
-     * 完整构造（P2 收获事务 18 步全链路）。
-     *
-     * @param economyService        经济服务（B）
-     * @param landService           土地服务（A）
-     * @param qualityService        品质服务（C）
-     * @param legendaryService      传说服务（C）
-     * @param memoryService         记忆服务（C）
-     * @param gameClock             世界时钟（D）
-     * @param eventPriceRateProvider 事件售价倍率提供者（D）；null 视为 NONE
-     * @param firstRewardService    首次传说奖励服务（C）；null = 不发放（规则文档 §六十七）
-     * @param logService            收获日志服务（C）；null = 不写日志（规则文档 §六十八 ⑮）
-     */
+    /** 既有 9 参数完整构造，继续兼容原测试。 */
     public BasicHarvestTransactionService(EconomyService economyService,
                                           LandService landService,
                                           QualityService qualityService,
@@ -140,6 +103,26 @@ public class BasicHarvestTransactionService implements HarvestTransactionService
                                           EventPriceRateProvider eventPriceRateProvider,
                                           LegendaryFirstRewardService firstRewardService,
                                           LogService logService) {
+        this(economyService, landService, qualityService, legendaryService,
+                memoryService, gameClock, eventPriceRateProvider,
+                firstRewardService, logService, null, null, null);
+    }
+
+    /**
+     * P3 正式生产构造：C 完整收获链消费 B Buff/Set 与 E Collection。
+     */
+    public BasicHarvestTransactionService(EconomyService economyService,
+                                          LandService landService,
+                                          QualityService qualityService,
+                                          LegendaryService legendaryService,
+                                          MemoryService memoryService,
+                                          GameClock gameClock,
+                                          EventPriceRateProvider eventPriceRateProvider,
+                                          LegendaryFirstRewardService firstRewardService,
+                                          LogService logService,
+                                          BuffService buffService,
+                                          SetService setService,
+                                          CollectionService collectionService) {
         this.economyService = Objects.requireNonNull(economyService, "经济服务不能为空");
         this.landService = Objects.requireNonNull(landService, "土地服务不能为空");
         this.qualityService = Objects.requireNonNull(qualityService, "品质服务不能为空");
@@ -151,6 +134,9 @@ public class BasicHarvestTransactionService implements HarvestTransactionService
                 : eventPriceRateProvider;
         this.firstRewardService = firstRewardService;
         this.logService = logService;
+        this.buffService = buffService;
+        this.setService = setService;
+        this.collectionService = collectionService;
     }
 
     @Override
@@ -169,7 +155,7 @@ public class BasicHarvestTransactionService implements HarvestTransactionService
 
     @Override
     public HarvestOutcome harvest(Soil soil, Inventory inventory) {
-        // ① 检查 MATURE（验收规范 §一百零三 第一步；失败不改任何状态）
+        // ① 检查 MATURE：失败不改变任何状态。
         if (soil == null || soil.getState() != SoilState.PLANTED) {
             return HarvestOutcome.failure(HarvestResult.NOT_PLANTED);
         }
@@ -181,30 +167,67 @@ public class BasicHarvestTransactionService implements HarvestTransactionService
             return HarvestOutcome.failure(HarvestResult.NOT_MATURE);
         }
 
-        // ② 取/补建生命记忆档案（经历数据唯一权威来源，验收规范 §九十四）
+        // ③ 读取/补建 CropMemory。
         CropMemory memory = memoryService.findMemory(crop.getCropUuid())
                 .orElseGet(() -> memoryService.createMemory(crop));
 
-        // ③~⑤ 先完成全部计算（规则文档 §六十八：计算阶段不做任何变更）
-        int score = qualityService.calculateScore(QualityScoreInput.of(crop.getCropType(), memory));
+        // ④ QualityScore：经历来自 Memory；品质装饰只消费 B Buff；事件来自真实 Memory 事件。
+        int decorationScore = buffService == null
+                ? 0
+                : buffService.getQualityScoreBonus(
+                        soil.getRow(), soil.getColumn(), crop.getCropType());
+        int eventScore = eventQualityScore(memory);
+        QualityScoreInput scoreInput = new QualityScoreInput(
+                crop.getCropType(),
+                memory.getManualWaterCount(),
+                memory.getRainCount(),
+                memory.getDroughtCount(),
+                memory.getGreenRainCount(),
+                memory.getFertilizerCount(),
+                decorationScore,
+                eventScore);
+        int score = qualityService.calculateScore(scoreInput);
+
+        // ⑤⑥ 传奇条件 + 概率 + 掷骰；正式 BasicLegendaryService 直接读 SetService。
         boolean legendary = legendaryService.rollBreakthrough(crop, memory, score);
+
+        // ⑦ 最终品质。普通品质路径最高 EPIC。
         Quality quality = legendary ? Quality.LEGENDARY : qualityService.determineQuality(score);
+
+        // ⑧ 最终售价：五个因子严格分离。
         int basePrice = economyService.calculateBaseSellPrice(crop.getCropType());
-        double eventRate = eventPriceRateProvider.priceRateFor(crop.getCropType());
-        int sellPrice = (int) Math.round(basePrice * quality.getPriceMultiplier() * eventRate);
+        double decorationPriceRate = buffService == null
+                ? 1.0
+                : buffService.getPriceRate(
+                        soil.getRow(), soil.getColumn(), crop.getCropType());
+        double setPriceRate = setService == null ? 1.0 : setService.getPriceSetRate();
+        double eventPriceRate = eventPriceRateProvider.priceRateFor(crop.getCropType());
+        int sellPrice = (int) Math.round(
+                basePrice
+                        * quality.getPriceMultiplier()
+                        * decorationPriceRate
+                        * setPriceRate
+                        * eventPriceRate);
         int fertilizerReward = quality.getFertilizerReward();
         long harvestWorldTime = currentWorldTime();
 
-        // ⑥ 发金币（B 的 EconomyService.addGold，金币唯一入口）
+        // ⑨ 金币入账。
         economyService.addGold(sellPrice);
 
-        // ⑦ 发肥料（规则文档 §六十六：品质肥料奖励；背包注入时入包）
+        // ⑩ 品质肥料奖励。
         if (inventory != null && fertilizerReward > 0) {
             inventory.addItem(new Item(ItemType.FERTILIZER, fertilizerReward));
         }
 
-        // ⑫ 首次传说奖励 +500 金币（规则文档 §六十七：三种传说各领一次；
-        // 未装配奖励服务时跳过，保持 P2 之前旧行为）
+        // ⑪ 图鉴：完整生产装配由事务内部更新，不再依赖 Controller 收获后补写。
+        if (collectionService != null) {
+            collectionService.collectCrop(crop.getCropType(), quality);
+            if (legendary) {
+                collectionService.collectLegendary(crop.getCropType());
+            }
+        }
+
+        // ⑫ 首次某种传奇 +500。生产路径的服务会从持久化传奇图鉴恢复已领取状态。
         int firstRewardGold = 0;
         if (legendary && firstRewardService != null) {
             firstRewardGold = firstRewardService.claimFirstReward(crop.getCropType());
@@ -213,25 +236,44 @@ public class BasicHarvestTransactionService implements HarvestTransactionService
             }
         }
 
-        // ⑬⑭ 落档记忆 + 生成生命故事（验收规范 §九十四；规则文档 §七十）
+        // ⑬⑭ 生成故事并落历史 Memory。
         String story = memoryService.completeHarvest(memory, quality, legendary, harvestWorldTime);
 
-        // ⑮ 写入 HarvestLog（规则文档 §六十八；未装配日志服务时跳过）
+        // ⑮ HarvestLog。
         if (logService != null) {
             logService.append(new HarvestLog(crop.getCropUuid(), crop.getCropType(),
                     quality, legendary, sellPrice, fertilizerReward, firstRewardGold,
                     story, harvestWorldTime));
         }
 
-        // ⑯⑰ 清除土地 Crop → Soil=TILLED（A 的 LandService，决策 D09；
-        // 必须先完成入账与落档再移除作物，作物移除后无法再读作物信息）
+        // ⑯⑰ 清地。
         landService.removeCropAndSetTilled(soil);
 
+        // ⑱ SQLite 的真正 commit/rollback 仍由 E Composition Root/持久化事务承担；
+        // C 侧已经保证所有规则入口集中在本方法，不在 Controller 重复业务公式。
         return HarvestOutcome.success(quality, score, sellPrice, fertilizerReward,
                 legendary, story, memory, firstRewardGold);
     }
 
-    /** 当前世界时间（游戏小时）：gameDay×24 + gameHour（决策 D14 口径）。 */
+    /**
+     * 事件品质分（V4.0 §三十八）：流星夜 +20，彩虹日 +15。
+     *
+     * <p>CropMemory 的事件列表可能因持续事件跨日而出现重复记录；规则没有定义
+     * 同一次持续事件按天重复叠加品质分，因此这里按“是否真实经历过该事件”各计一次，
+     * 避免持续 24 小时事件被重复放大。
+     */
+    private int eventQualityScore(CropMemory memory) {
+        int score = 0;
+        if (memory.getEvents().contains(EventType.METEOR_SHOWER)) {
+            score += METEOR_QUALITY_BONUS;
+        }
+        if (memory.getEvents().contains(EventType.RAINBOW_DAY)) {
+            score += RAINBOW_DAY_QUALITY_BONUS;
+        }
+        return score;
+    }
+
+    /** 当前世界时间（游戏小时）：gameDay×24 + gameHour。 */
     private long currentWorldTime() {
         return (long) gameClock.getGameDay() * HOURS_PER_DAY + gameClock.getGameHour();
     }

@@ -34,6 +34,10 @@ public final class DecorationOverlayView
     private final Pane decorationLayer =
             new Pane();
 
+    /** P4 交互浮层：始终高于装饰，只承载 FarmView 的动态操作菜单。 */
+    private final Pane interactionLayer =
+            new Pane();
+
     private Decoration pendingDecoration;
 
     private Consumer<String> messageSink =
@@ -91,10 +95,17 @@ public final class DecorationOverlayView
                 FarmView.MAP_PX
         );
 
+        interactionLayer.setPrefSize(FarmView.MAP_PX, FarmView.MAP_PX);
+        interactionLayer.setPickOnBounds(false);
+
         getChildren().addAll(
                 farmView,
-                decorationLayer
+                decorationLayer,
+                interactionLayer
         );
+
+        // 解决“播种/浇水菜单被装饰压住”：只提升菜单，不改变 FarmView 业务或坐标系。
+        farmView.promoteMenuTo(interactionLayer);
 
         farmView.addEventFilter(
                 MouseEvent.MOUSE_PRESSED,
@@ -236,61 +247,33 @@ public final class DecorationOverlayView
             return;
         }
 
-        double baseWidth =
-                type.getWidth() * FarmView.TILE_SIZE;
+        double baseWidth = type.getWidth() * FarmView.TILE_SIZE;
+        double baseHeight = type.getHeight() * FarmView.TILE_SIZE;
+        double maxWidth = Math.max(8, baseWidth - 6);
+        double maxHeight = Math.max(8, baseHeight - 6);
 
-        double baseHeight =
-                type.getHeight() * FarmView.TILE_SIZE;
+        String path = "/assets/decoration/" + type.getAssetFileName();
+        ImageView view = BImageAssets.view(path, maxWidth, maxHeight);
 
-        double scale = 1.08;
+        double x = decoration.getColumn() * FarmView.TILE_SIZE;
+        double y = decoration.getRow() * FarmView.TILE_SIZE;
+        double width = maxWidth;
+        double height = maxHeight;
 
-        double width =
-                baseWidth * scale;
-
-        double height =
-                baseHeight * scale;
-
-        double x =
-                decoration.getColumn() * FarmView.TILE_SIZE
-                        - (width - baseWidth) / 2.0;
-
-        double y =
-                decoration.getRow() * FarmView.TILE_SIZE
-                        - (height - baseHeight) / 2.0;
-
-        String path =
-                "/assets/decoration/"
-                        + type.getAssetFileName();
-
-        ImageView view =
-                BImageAssets.view(
-                        path,
-                        width,
-                        height
-                );
-
-        if (view != null) {
-
-            /*
-             * 地图格需要完整覆盖 footprint，
-             * 因此这里不保持原图宽高比。
-             */
-            view.setPreserveRatio(
-                    false
-            );
-
-            view.setLayoutX(
-                    x
-            );
-
-            view.setLayoutY(
-                    y
-            );
-
-            decorationLayer
-                    .getChildren()
-                    .add(view);
-
+        if (view != null && view.getImage() != null) {
+            // P4：保持素材原始宽高比、脚底贴格底、水平居中；不再强行拉伸 1.08 倍。
+            double imageWidth = Math.max(1, view.getImage().getWidth());
+            double imageHeight = Math.max(1, view.getImage().getHeight());
+            double scale = Math.min(maxWidth / imageWidth, maxHeight / imageHeight);
+            width = Math.max(1, Math.floor(imageWidth * scale));
+            height = Math.max(1, Math.floor(imageHeight * scale));
+            view.setFitWidth(width);
+            view.setFitHeight(height);
+            view.setPreserveRatio(false);
+            view.setSmooth(false);
+            view.setLayoutX(x + (baseWidth - width) / 2.0);
+            view.setLayoutY(y + baseHeight - height - 2);
+            decorationLayer.getChildren().add(view);
             return;
         }
 

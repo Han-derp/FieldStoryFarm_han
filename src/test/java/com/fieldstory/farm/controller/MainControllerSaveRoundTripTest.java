@@ -111,8 +111,20 @@ class MainControllerSaveRoundTripTest {
         assertNotNull(reloaded, "重开后应能读到存档");
         assertNotNull(reloaded.getPlayer(), "玩家应随存档恢复");
         assertEquals(64, reloaded.getPlots().size(), "SQLite 应持久化全部 64 块农田");
-        for (var plot : reloaded.getPlots()) {
-            assertEquals("EMPTY", plot.getState(), "未开垦地块读回应保持 EMPTY");
+
+        // P3 起新档可能根据 balance-config 将部分格子设为 LOCKED。
+        // 本测试验证的是“保存 → 重开”无损往返，因此不再把所有格子写死为 EMPTY，
+        // 而是逐坐标比较保存前快照与重载结果，确保 EMPTY / LOCKED / 其他状态都原样恢复。
+        for (var expected : snapshot.getPlots()) {
+            var actual = reloaded.getPlots().stream()
+                    .filter(plot -> plot.getRow() == expected.getRow()
+                            && plot.getColumn() == expected.getColumn())
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError(
+                            "重载后缺少地块 (" + expected.getRow() + "," + expected.getColumn() + ")"));
+            assertEquals(expected.getState(), actual.getState(),
+                    "地块状态保存/重载后应保持一致：("
+                            + expected.getRow() + "," + expected.getColumn() + ")");
         }
 
         // B P0 经济口径：新档不赠送起始种子，库存 0 也应随存档往返

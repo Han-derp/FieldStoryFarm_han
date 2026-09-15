@@ -2,7 +2,6 @@ package com.fieldstory.farm.service.impl;
 
 import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.EventType;
-import com.fieldstory.farm.model.GameClock;
 import com.fieldstory.farm.model.impl.BasicEventState;
 import com.fieldstory.farm.model.impl.BasicGameClock;
 import com.fieldstory.farm.util.RandomProvider;

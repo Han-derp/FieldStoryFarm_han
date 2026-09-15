@@ -61,52 +61,35 @@ public class BasicEventService implements EventService {
     public EventType rollDailyEvent(int dayIndex) {
         int roll = RandomProvider.nextInt(100);
         EventType type;
-
-        if (roll < EVENT_PROB_NONE) {
+        if (roll < EVENT_PROB_NONE) {                                   // [0, 74) → 74%
             type = EventType.NONE;
-        } else if (roll < EVENT_PROB_NONE + EVENT_PROB_METEOR_SHOWER) {
+        } else if (roll < EVENT_PROB_NONE + EVENT_PROB_METEOR_SHOWER) { // [74, 79) → 5%
             type = EventType.METEOR_SHOWER;
-        } else if (roll < EVENT_PROB_NONE
-                + EVENT_PROB_METEOR_SHOWER
-                + EVENT_PROB_MYSTERY_MERCHANT) {
+        } else if (roll < EVENT_PROB_NONE + EVENT_PROB_METEOR_SHOWER
+                + EVENT_PROB_MYSTERY_MERCHANT) {                        // [79, 87) → 8%
             type = EventType.MYSTERY_MERCHANT;
-        } else if (roll < EVENT_PROB_NONE
-                + EVENT_PROB_METEOR_SHOWER
-                + EVENT_PROB_MYSTERY_MERCHANT
-                + EVENT_PROB_ANIMAL_VISIT) {
+        } else if (roll < EVENT_PROB_NONE + EVENT_PROB_METEOR_SHOWER
+                + EVENT_PROB_MYSTERY_MERCHANT + EVENT_PROB_ANIMAL_VISIT) { // [87, 97) → 10%
             type = EventType.ANIMAL_VISIT;
-        } else {
+        } else {                                                        // [97, 100) → 3%
             type = EventType.RAINBOW_DAY;
         }
 
-        /*
-         * D 方案 A：
-         * 当天事件在 00:00 创建。
-         *
-         * dayIndex 是本次抽取所对应的目标游戏日，
-         * 所以事件开始时间必须使用该日 00:00。
-         *
-         * 不能读取一个可能仍然停留在旧时刻的 GameClock。
-         */
+        // D 方案 A：当天事件在 00:00 创建。dayIndex 是本次抽取的目标游戏日，
+        // 因此事件起点必须锚定该日 00:00，而不是读取可能仍停留在旧时刻的 GameClock。
         long now = dayStartWorldTime(dayIndex);
-
         eventState.setEventType(type);
         eventState.setTargetCropType(null);
         eventState.setPayload(null);
 
         if (type == EventType.NONE) {
-
             eventState.setStartWorldTime(0L);
             eventState.setEndWorldTime(0L);
-
         } else if (type.isInstant()) {
-
-            // 小动物来访属于即时事件，无持续时间。
+            // 即时事件（小动物来访）：不设持续，起止均为当前时刻（规则文档 §五十）
             eventState.setStartWorldTime(now);
             eventState.setEndWorldTime(now);
-
         } else {
-
             eventState.setStartWorldTime(now);
             eventState.setEndWorldTime(now + durationOf(type));
         }
@@ -114,20 +97,15 @@ public class BasicEventService implements EventService {
         if (type == EventType.MYSTERY_MERCHANT) {
             eventState.setTargetCropType(randomTargetCrop());
         }
-
         return type;
     }
 
     @Override
     public boolean isEventActive(long currentWorldTime) {
         EventType type = eventState.getEventType();
-
-        if (type == null
-                || type == EventType.NONE
-                || type.isInstant()) {
+        if (type == null || type == EventType.NONE || type.isInstant()) {
             return false;
         }
-
         return currentWorldTime >= eventState.getStartWorldTime()
                 && currentWorldTime < eventState.getEndWorldTime();
     }
@@ -135,13 +113,10 @@ public class BasicEventService implements EventService {
     @Override
     public void expireIfNeeded(long currentWorldTime) {
         EventType type = eventState.getEventType();
-
         if (type == null || type == EventType.NONE) {
             return;
         }
-
         if (currentWorldTime >= eventState.getEndWorldTime()) {
-
             eventState.setEventType(EventType.NONE);
             eventState.setStartWorldTime(0L);
             eventState.setEndWorldTime(0L);
@@ -152,16 +127,12 @@ public class BasicEventService implements EventService {
 
     @Override
     public String getDisplayName(EventType type) {
-        return type == null
-                ? EventType.NONE.getDisplayName()
-                : type.getDisplayName();
+        return type == null ? EventType.NONE.getDisplayName() : type.getDisplayName();
     }
 
     @Override
     public String getIcon(EventType type) {
-        return type == null
-                ? EventType.NONE.getIcon()
-                : type.getIcon();
+        return type == null ? EventType.NONE.getIcon() : type.getIcon();
     }
 
     @Override
@@ -180,64 +151,43 @@ public class BasicEventService implements EventService {
     }
 
     /**
-     * 计算事件持续时间。
+     * 计算事件持续时间（游戏小时，规则文档 §四十八~§五十一）。
      *
      * @param type 事件类型
-     * @return 持续时间，单位：游戏小时
+     * @return 持续时间（游戏小时）
      */
     private int durationOf(EventType type) {
-
         switch (type) {
-
             case METEOR_SHOWER:
                 return EVENT_DURATION_METEOR_SHOWER;
-
             case MYSTERY_MERCHANT:
                 return EVENT_DURATION_MYSTERY_MERCHANT;
-
             case RAINBOW_DAY:
                 return EVENT_DURATION_RAINBOW_DAY;
-
             default:
                 return 0;
         }
     }
 
     /**
-     * 随机指定神秘商人目标作物。
+     * 随机指定神秘商人目标作物（规则文档 §四十九：WHEAT/CORN/CARROT）。
      *
-     * @return WHEAT / CORN / CARROT 之一
+     * @return 目标作物类型
      */
     private CropType randomTargetCrop() {
-
-        CropType[] candidates = {
-                CropType.WHEAT,
-                CropType.CORN,
-                CropType.CARROT
-        };
-
-        return candidates[
-                RandomProvider.nextInt(candidates.length)
-                ];
+        CropType[] candidates = {CropType.WHEAT, CropType.CORN, CropType.CARROT};
+        return candidates[RandomProvider.nextInt(candidates.length)];
     }
 
     /**
      * 计算指定游戏日 00:00 对应的世界时间。
      *
-     * <p>当前项目的世界时间适配口径：
+     * <p>项目当前世界时间适配口径为 {@code dayIndex * 24 + hour}；每日事件在
+     * 00:00 抽取，因此 hour 固定为 0。使用传入 dayIndex 可以保证在线跨日与
+     * 离线模拟调用得到完全一致的事件时间轴。
      *
-     * <pre>
-     * worldTime = gameDay * 24 + gameHour
-     * </pre>
-     *
-     * 每日 Event 在 00:00 抽取，因此：
-     *
-     * <pre>
-     * eventStartWorldTime = dayIndex * 24
-     * </pre>
-     *
-     * @param dayIndex 游戏日，从 1 开始
-     * @return 当天 00:00 世界时间
+     * @param dayIndex 游戏日索引（从 1 开始）
+     * @return 当天 00:00 对应的世界时间（游戏小时）
      */
     private long dayStartWorldTime(int dayIndex) {
         return (long) dayIndex * 24L;

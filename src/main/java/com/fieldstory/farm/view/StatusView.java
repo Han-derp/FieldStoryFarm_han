@@ -105,7 +105,8 @@ public class StatusView extends HBox {
         this.goldLabel = new Label();
         this.weatherLabel = new Label();
         this.eventLabel = new Label();
-        this.setSpacing(16);
+        this.setSpacing(10);
+        this.getStyleClass().add("status-view");
         this.getChildren().addAll(dayLabel, timeLabel, goldLabel, weatherLabel, eventLabel);
         // 文字色统一使用 7 色主色表 #493526（UI 规范，禁止自造色）
         Color textColor = Color.web("#493526");

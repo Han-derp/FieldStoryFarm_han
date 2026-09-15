@@ -121,6 +121,12 @@ public class JsonSaveService implements SaveService {
         } else {
             root.put("currentWorldTime", worldTime);
         }
+        String lastRealTime = state.getLastRealTime();
+        if (lastRealTime == null) {
+            root.putNull("lastRealTime");
+        } else {
+            root.put("lastRealTime", lastRealTime);
+        }
 
         Player player = state.getPlayer();
         if (player != null) {
@@ -180,6 +186,14 @@ public class JsonSaveService implements SaveService {
             crop.put("plantWorldTime", plot.getPlantWorldTime());
             crop.put("manualWaterCount", plot.getManualWaterCount());
             crop.put("lastManualWaterGameDay", plot.getLastManualWaterGameDay());
+            crop.put("fertilizerCount", plot.getFertilizerCount());
+            crop.put("lastFertilizedGameDay", plot.getLastFertilizedGameDay());
+            crop.put("droughtCount", plot.getDroughtCount());
+            crop.put("rainCount", plot.getRainCount());
+            crop.put("greenRainCount", plot.getGreenRainCount());
+            crop.put("lastHydratedWorldTime", plot.getLastHydratedWorldTime());
+            crop.put("droughtStreak", plot.getDroughtStreak());
+            crop.put("eventCount", plot.getEventCount());
         } else {
             node.putNull("crop");
         }
@@ -214,6 +228,10 @@ public class JsonSaveService implements SaveService {
         JsonNode worldTime = root.get("currentWorldTime");
         if (worldTime != null && worldTime.isTextual()) {
             state.setCurrentWorldTime(worldTime.asText());
+        }
+        JsonNode lastRealTime = root.get("lastRealTime");
+        if (lastRealTime != null && lastRealTime.isTextual()) {
+            state.setLastRealTime(lastRealTime.asText());
         }
 
         JsonNode unlocked = root.get("unlocked");
@@ -292,6 +310,14 @@ public class JsonSaveService implements SaveService {
             plot.setPlantWorldTime(crop.path("plantWorldTime").asText(null));
             plot.setManualWaterCount(crop.path("manualWaterCount").asInt(0));
             plot.setLastManualWaterGameDay(crop.path("lastManualWaterGameDay").asText(null));
+            plot.setFertilizerCount(crop.path("fertilizerCount").asInt(0));
+            plot.setLastFertilizedGameDay(crop.path("lastFertilizedGameDay").asText("-1"));
+            plot.setDroughtCount(crop.path("droughtCount").asInt(0));
+            plot.setRainCount(crop.path("rainCount").asInt(0));
+            plot.setGreenRainCount(crop.path("greenRainCount").asInt(0));
+            plot.setLastHydratedWorldTime(crop.path("lastHydratedWorldTime").asText("-1"));
+            plot.setDroughtStreak(crop.path("droughtStreak").asInt(0));
+            plot.setEventCount(crop.path("eventCount").asInt(0));
         }
         return plot;
     }

@@ -6,6 +6,7 @@ import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.EventType;
 import com.fieldstory.farm.service.LegendaryCheck;
 import com.fieldstory.farm.service.LegendaryService;
+import com.fieldstory.farm.service.SetService;
 import com.fieldstory.farm.util.RandomProvider;
 
 import java.util.ArrayList;
@@ -44,8 +45,28 @@ public class BasicLegendaryService implements LegendaryService {
     /** 突破概率与随机数换算的分母：nextDouble()×100 与百分比比较 */
     private static final double PERCENT_BASE = 100.0;
 
-    /** 传奇之光套装加成（%），P2 默认 0（验收规范 §一百：P3 套装系统接入） */
-    private int legendarySetBonus;
+    /** B 模块套装服务；生产路径直接读取 getLegendarySetBonusPercent()。 */
+    private final SetService setService;
+
+    /**
+     * 旧测试/早期装配兼容字段。
+     * 生产路径注入 SetService 后不会读取该字段。
+     */
+    private int legacyLegendarySetBonus;
+
+    /** P2/旧测试兼容：未装配 SetService 时套装加成为 0。 */
+    public BasicLegendaryService() {
+        this(null);
+    }
+
+    /**
+     * P3 正式构造：传奇之光加成必须直接消费 B.SetService。
+     *
+     * @param setService B 模块套装服务；可为 null（旧兼容）
+     */
+    public BasicLegendaryService(SetService setService) {
+        this.setService = setService;
+    }
 
     @Override
     public LegendaryCheck checkEligibility(Crop crop, CropMemory memory, int qualityScore) {
@@ -129,8 +150,12 @@ public class BasicLegendaryService implements LegendaryService {
         if (memory.getEvents().contains(EventType.METEOR_SHOWER)) {
             chance += METEOR_BONUS;
         }
-        // 传奇之光套装加成（P2 默认 0，验收规范 §一百）
-        chance += legendarySetBonus;
+        // 传奇之光套装加成：生产路径只消费 B.SetService#getLegendarySetBonusPercent()。
+        // 不从 BuffSnapshot / priceRate / growthRate 等聚合字段读取，避免重复计入。
+        int setBonus = setService == null
+                ? legacyLegendarySetBonus
+                : setService.getLegendarySetBonusPercent();
+        chance += Math.max(0, setBonus);
         return Math.min(chance, MAX_CHANCE);
     }
 
@@ -149,6 +174,8 @@ public class BasicLegendaryService implements LegendaryService {
         if (bonusPercent < 0) {
             throw new IllegalArgumentException("套装加成不能为负：" + bonusPercent);
         }
-        this.legendarySetBonus = bonusPercent;
+        // 仅保留给未注入 SetService 的旧测试/旧装配。
+        // 正式生产构造 BasicLegendaryService(SetService) 时，本值不会参与计算。
+        this.legacyLegendarySetBonus = bonusPercent;
     }
 }

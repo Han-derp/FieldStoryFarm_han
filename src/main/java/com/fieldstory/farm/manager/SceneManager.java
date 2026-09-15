@@ -65,6 +65,7 @@ public class SceneManager {
      */
     public Scene assemble(Node centerNode, double width, double height) {
         root = new BorderPane();
+        root.getStyleClass().add("app-root");
         mounted.clear();
         mount(Slot.CENTER, centerNode);
         return new Scene(root, width, height);

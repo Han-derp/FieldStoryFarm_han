@@ -3,27 +3,34 @@ package com.fieldstory.farm.service;
 import com.fieldstory.farm.model.EventType;
 import com.fieldstory.farm.model.WeatherType;
 
+import java.util.List;
+import java.util.UUID;
+
 /**
- * 每日结算摘要（A 模块 P2 持续世界引擎；验收规范 §八十九 第 ⑨ 步 DailyLog 的数据体；
- * 决策 D24：A 只产数据、不碰数据库与任何 DAO）。
+ * 每日结算摘要（在线/离线共用）。
  *
- * <p>不可变记录：一次日结一份摘要，由调用方（B 模块 OfflineSimulationService）
- * 消费或持久化为离线日志。
- *
- * @param gameDay           结算当日游戏日（§八十九 第 ⑩ 步：结果记录为结算当日，
- *                          A 不负责推进 D 的时钟）
- * @param weather           当日天气（昨日日末已掷出，与 {@link DaySettlementInput#weather()} 同源）
- * @param event             当日生效事件（决策 D29：与
- *                          {@link DaySettlementInput#eventInEffect()} 同源；
- *                          §八十九⑨ DailyLog 记录的是当日事件，非次日抽取结果）
- * @param maturedCount      当日成熟作物数（progress ≥ 100；不收获、不自动出售，
- *                          验收规范 §八十七）
- * @param witheredCount     当日枯萎作物数（§八十九 第 ⑦ 步判定触发数）
- * @param rainHydratedCount 当日雨天自动补水作物数（当日天气为 RAIN 时全部 PLANTED
- *                          作物获补水，规则文档 §二十一；第 ⑫ 步为下一日的补水，
- *                          其计数体现在下一日结算的摘要）
+ * <p>第三轮开始，摘要除数量外还携带两类“事实”：事件真实起止窗口，以及真正进入
+ * 枯萎概率区间的 cropUuid。这样 Memory 层只记录 A 世界引擎已经判定出的事实，
+ * 不复制枯萎概率公式，也不会让在线/离线各自猜一遍。
  */
 public record DailySimulationResult(long gameDay, WeatherType weather,
                                     EventType event, int maturedCount,
-                                    int witheredCount, int rainHydratedCount) {
+                                    int witheredCount, int rainHydratedCount,
+                                    long eventStartWorldTime,
+                                    long eventEndWorldTime,
+                                    List<UUID> witherRiskCropUuids) {
+
+    /** 兼容第一/二轮及既有测试的 6 参数构造。 */
+    public DailySimulationResult(long gameDay, WeatherType weather,
+                                 EventType event, int maturedCount,
+                                 int witheredCount, int rainHydratedCount) {
+        this(gameDay, weather, event, maturedCount, witheredCount,
+                rainHydratedCount, -1L, -1L, List.of());
+    }
+
+    public DailySimulationResult {
+        witherRiskCropUuids = witherRiskCropUuids == null
+                ? List.of()
+                : List.copyOf(witherRiskCropUuids);
+    }
 }

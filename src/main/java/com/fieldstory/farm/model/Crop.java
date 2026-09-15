@@ -43,6 +43,16 @@ public interface Crop {
 
     void setLastManualWaterGameDay(long lastManualWaterGameDay);
 
+    /** 生命周期累计施肥次数（规则文档 §二十六；验收规范 §六十三/§六十四） */
+    int getFertilizerCount();
+
+    void setFertilizerCount(int fertilizerCount);
+
+    /** 最近一次施肥的游戏日；-1 表示从未施肥。 */
+    long getLastFertilizedGameDay();
+
+    void setLastFertilizedGameDay(long lastFertilizedGameDay);
+
     /** 累计干旱日数（规则文档 §二十二；验收规范 §五十） */
     int getDroughtCount();
 

@@ -31,24 +31,19 @@ public final class OfflineLogPopupView extends Popup {
         this.controller = Objects.requireNonNull(controller, "controller");
 
         Label title = new Label("离开期间农场发生了什么");
-        title.setStyle("-fx-text-fill: #493526;"
-                + "-fx-font-size: 18;"
-                + "-fx-font-weight: bold;");
+        title.getStyleClass().add("section-title");
 
         ScrollPane scroll = new ScrollPane(daysBox);
         scroll.setFitToWidth(true);
         scroll.setPrefViewportHeight(360);
-        scroll.setStyle("-fx-background-color: transparent;");
+        scroll.getStyleClass().add("transparent-scroll");
 
         VBox root = new VBox(12, title, scroll);
         root.setPadding(new Insets(14));
         root.setPrefWidth(420);
         root.setPrefHeight(460);
-        root.setStyle("-fx-background-color: #FFF3DD;"
-                + "-fx-background-radius: 12;"
-                + "-fx-border-color: #8B5E3C;"
-                + "-fx-border-radius: 12;"
-                + "-fx-border-width: 2;");
+        root.getStyleClass().addAll("popup-panel", "offline-panel");
+        UiTheme.apply(root);
 
         getContent().add(root);
         setAutoHide(true);
@@ -107,29 +102,26 @@ public final class OfflineLogPopupView extends Popup {
         if (log.days().isEmpty()) {
             Label empty = new Label("离开期间没有需要特别记录的变化。");
             empty.setWrapText(true);
-            empty.setStyle("-fx-text-fill: #6B5848; -fx-font-size: 13;");
+            empty.getStyleClass().add("hint-text");
             daysBox.getChildren().add(empty);
             return;
         }
 
         for (DailyOfflineLog day : log.days()) {
             Label dayTitle = new Label("第" + day.gameDay() + "日");
-            dayTitle.setStyle("-fx-text-fill: #493526;"
-                    + "-fx-font-size: 15;"
-                    + "-fx-font-weight: bold;");
+            dayTitle.getStyleClass().add("subsection-title");
 
             VBox lines = new VBox(4);
             for (String text : day.lines()) {
                 Label line = new Label(text);
                 line.setWrapText(true);
-                line.setStyle("-fx-text-fill: #493526; -fx-font-size: 13;");
+                line.getStyleClass().add("normal-text");
                 lines.getChildren().add(line);
             }
 
             VBox group = new VBox(5, dayTitle, lines);
             group.setPadding(new Insets(8));
-            group.setStyle("-fx-background-color: rgba(255,255,255,0.45);"
-                    + "-fx-background-radius: 8;");
+            group.getStyleClass().add("offline-day-card");
             daysBox.getChildren().add(group);
         }
     }

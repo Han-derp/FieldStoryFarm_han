@@ -35,11 +35,8 @@ public final class ShopPopupView extends Popup {
         root.setPadding(new Insets(12));
         root.setPrefWidth(360);
         root.setPrefHeight(480);
-        root.setStyle("-fx-background-color: #FFF3DD;"
-                + "-fx-background-radius: 12;"
-                + "-fx-border-color: #8B5E3C;"
-                + "-fx-border-radius: 12;"
-                + "-fx-border-width: 2;");
+        root.getStyleClass().addAll("popup-panel", "shop-popup");
+        UiTheme.apply(root);
 
         getContent().add(root);
         setAutoHide(true);
@@ -48,10 +45,7 @@ public final class ShopPopupView extends Popup {
     private Button tab(String text) {
         Button button = new Button(text);
         button.setPrefSize(120, 36);
-        button.setStyle("-fx-background-color: #A97850;"
-                + "-fx-background-radius: 10;"
-                + "-fx-text-fill: #FFF3DD;"
-                + "-fx-font-size: 14;");
+        button.getStyleClass().add("primary-button");
         return button;
     }
 

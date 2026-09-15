@@ -33,6 +33,12 @@ public class BasicCrop implements Crop {
      *  默认 -1 哨兵表示"从未浇水"，与游戏日 0 区分（决策 D14） */
     private long lastManualWaterGameDay = -1;
 
+    /** 生命周期累计施肥次数（最多 3 次；具体约束由 FertilizerService 负责）。 */
+    private int fertilizerCount;
+
+    /** 最近一次施肥游戏日；-1 表示从未施肥。 */
+    private long lastFertilizedGameDay = -1;
+
     /** 累计干旱日数（规则文档 §二十二；验收规范 §五十） */
     private int droughtCount;
 
@@ -119,6 +125,26 @@ public class BasicCrop implements Crop {
     @Override
     public void setLastManualWaterGameDay(long lastManualWaterGameDay) {
         this.lastManualWaterGameDay = lastManualWaterGameDay;
+    }
+
+    @Override
+    public int getFertilizerCount() {
+        return fertilizerCount;
+    }
+
+    @Override
+    public void setFertilizerCount(int fertilizerCount) {
+        this.fertilizerCount = Math.max(0, fertilizerCount);
+    }
+
+    @Override
+    public long getLastFertilizedGameDay() {
+        return lastFertilizedGameDay;
+    }
+
+    @Override
+    public void setLastFertilizedGameDay(long lastFertilizedGameDay) {
+        this.lastFertilizedGameDay = lastFertilizedGameDay;
     }
 
     @Override

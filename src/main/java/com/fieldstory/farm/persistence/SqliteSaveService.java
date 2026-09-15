@@ -220,7 +220,15 @@ public class SqliteSaveService implements SaveService {
                     plot.getGrowthProgress(),
                     plot.getPlantWorldTime(),
                     plot.getManualWaterCount(),
-                    plot.getLastManualWaterGameDay()));
+                    plot.getLastManualWaterGameDay(),
+                    plot.getFertilizerCount(),
+                    plot.getLastFertilizedGameDay(),
+                    plot.getDroughtCount(),
+                    plot.getRainCount(),
+                    plot.getGreenRainCount(),
+                    plot.getLastHydratedWorldTime(),
+                    plot.getDroughtStreak(),
+                    plot.getEventCount()));
         }
 
         for (DecorationState decoration : state.getDecorations()) {
@@ -249,7 +257,7 @@ public class SqliteSaveService implements SaveService {
         // P1 先写存档时刻的真实时间。
         worldStateDao.insert(new WorldStateDao.WorldStateRow(
                 state.getCurrentWorldTime(),
-                LocalDateTime.now().toString(),
+                state.getLastRealTime(),
                 state.getCurrentWeather() == null ? null : state.getCurrentWeather().name(),
                 state.getGameDay(),
                 null,
@@ -306,6 +314,7 @@ public class SqliteSaveService implements SaveService {
         if (worldState != null) {
             state.setGameDay(worldState.currentDayIndex());
             state.setCurrentWorldTime(worldState.currentWorldTime());
+            state.setLastRealTime(worldState.lastRealTime());
             state.setWorldTotalMinutes(worldState.worldTotalMinutes());
             state.setCurrentWeather(parseEnum(WeatherType.class, worldState.currentWeather()));
             state.setWeatherDayIndex((int) worldState.currentDayIndex());
@@ -385,6 +394,14 @@ public class SqliteSaveService implements SaveService {
         plot.setPlantWorldTime(crop.plantWorldTime());
         plot.setManualWaterCount(crop.manualWaterCount());
         plot.setLastManualWaterGameDay(crop.lastManualWaterGameDay());
+        plot.setFertilizerCount(crop.fertilizerCount());
+        plot.setLastFertilizedGameDay(crop.lastFertilizedGameDay());
+        plot.setDroughtCount(crop.droughtCount());
+        plot.setRainCount(crop.rainCount());
+        plot.setGreenRainCount(crop.greenRainCount());
+        plot.setLastHydratedWorldTime(crop.lastHydratedWorldTime());
+        plot.setDroughtStreak(crop.droughtStreak());
+        plot.setEventCount(crop.eventCount());
     }
 
     /** 地图尺寸与当前版本不一致时告警（不阻断读档，仅提示可能来自旧/新版本存档）。 */

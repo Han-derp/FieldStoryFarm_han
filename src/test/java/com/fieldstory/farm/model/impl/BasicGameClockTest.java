@@ -3,6 +3,8 @@ package com.fieldstory.farm.model.impl;
 import com.fieldstory.farm.model.GameClock;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -105,8 +107,27 @@ class BasicGameClockTest {
     }
 
     @Test
-    void offlineDurationIsZeroInP0() {
+    void offlineDurationWithoutSavedRealTimeIsZero() {
         GameClock clock = new BasicGameClock();
+        assertEquals(0L, clock.calculateOfflineDuration(),
+                "没有可靠退出时间基准时不得猜测离线时长");
+    }
+
+    @Test
+    void offlineDurationUsesSavedRealTimeInWholeMinutes() {
+        LocalDateTime now = LocalDateTime.of(2026, 9, 14, 12, 0);
+        GameClock clock = new FixedNowClock(now);
+        clock.setLastRealTime(now.minusMinutes(30));
+
+        assertEquals(30L, clock.calculateOfflineDuration());
+    }
+
+    @Test
+    void offlineDurationNeverBecomesNegativeWhenSystemClockMovesBackwards() {
+        LocalDateTime now = LocalDateTime.of(2026, 9, 14, 12, 0);
+        GameClock clock = new FixedNowClock(now);
+        clock.setLastRealTime(now.plusMinutes(5));
+
         assertEquals(0L, clock.calculateOfflineDuration());
     }
 
@@ -128,5 +149,18 @@ class BasicGameClockTest {
         GameClock clock = new BasicGameClock();
         clock.setTotalMinutes(0);
         assertEquals(0, clock.getTotalMinutes());
+    }
+    /** 固定现实时间，保证离线时长测试完全可重复。 */
+    private static final class FixedNowClock extends BasicGameClock {
+        private final LocalDateTime now;
+
+        private FixedNowClock(LocalDateTime now) {
+            this.now = now;
+        }
+
+        @Override
+        public LocalDateTime getRealTime() {
+            return now;
+        }
     }
 }

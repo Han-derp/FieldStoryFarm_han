@@ -6,6 +6,9 @@ import com.fieldstory.farm.model.FarmPlot;
 import com.fieldstory.farm.model.GrowthStage;
 import com.fieldstory.farm.model.Soil;
 import com.fieldstory.farm.model.SoilState;
+import javafx.animation.FadeTransition;
+import javafx.animation.ParallelTransition;
+import javafx.animation.ScaleTransition;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
@@ -14,10 +17,14 @@ import javafx.scene.image.ImageView;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.effect.ColorAdjust;
 import javafx.scene.shape.Rectangle;
 import javafx.util.Duration;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
@@ -162,6 +169,15 @@ public class FarmView extends Pane {
     /** 隐藏式操作菜单（UI规范 §12）：默认隐藏 */
     private final VBox menuBox = new VBox(4);
 
+    /**
+     * 操作菜单宿主。FarmView 单独使用时仍为自身（兼容既有测试）；正式装配进
+     * DecorationOverlayView 后会被提升到最上层 interactionLayer，解决菜单被装饰遮挡。
+     */
+    private Pane menuHost = this;
+
+    /** 上一次渲染的阶段，仅用于 P4 视觉反馈；不参与任何成长判定。 */
+    private final Map<UUID, GrowthStage> lastRenderedStages = new HashMap<>();
+
     /** 点击 FARM_PLOT 格的回调（由 Controller 注册） */
     private Consumer<Soil> onTileSelected;
 
@@ -180,6 +196,8 @@ public class FarmView extends Pane {
         selectionRect.setFill(Color.TRANSPARENT);
         selectionRect.setStroke(COLOR_HIGHLIGHT);
         selectionRect.setStrokeWidth(3);
+        selectionRect.setMouseTransparent(true);
+        selectionRect.setVisible(false);
         getChildren().add(selectionRect);
         getChildren().add(menuBox);
     }
@@ -482,6 +500,11 @@ public class FarmView extends Pane {
                 getChildren().add(cropSprite);
 
                 updateCropBlock(row, column, plotType, soil);
+                if (soil != null && soil.getCrop() != null
+                        && soil.getCrop().getCropUuid() != null
+                        && soil.getCrop().getGrowthStage() != null) {
+                    lastRenderedStages.put(soil.getCrop().getCropUuid(), soil.getCrop().getGrowthStage());
+                }
             }
         }
     }
@@ -504,26 +527,77 @@ public class FarmView extends Pane {
     private void updateGroundTexture(int row, int column, FarmPlot plotType, Soil soil) {
         ImageView target = groundTextures[row][column];
         GroundVariant variant = groundVariantFor(plotType, soil, currentGameDay, wetToday);
+
+        // P4 视觉层只补底图，不改变状态机语义：未开垦/LOCKED 仍是原状态，
+        // 但视觉上使用草地贴图；成熟/枯萎仍保留其状态色，只叠半透明耕地纹理。
+        boolean statusTint = false;
+        if (plotType == FarmPlot.FARM_PLOT && soil != null) {
+            SoilState state = soil.getState();
+            if (state == SoilState.EMPTY || state == SoilState.LOCKED) {
+                variant = GroundVariant.GRASS;
+            } else if (state == SoilState.PLANTED && soil.getCrop() != null
+                    && (soil.getCrop().getGrowthStage() == GrowthStage.MATURE
+                    || soil.getCrop().getGrowthStage() == GrowthStage.WITHERED)) {
+                variant = GroundVariant.TILLED;
+                statusTint = true;
+            }
+        }
+
         if (variant == GroundVariant.NONE) {
-            // 决策 D-G3：MATURE/WITHERED/EMPTY/LOCKED 保持纯色语义，不铺贴图
             target.setVisible(false);
-            target.setImage(null); // 👈 加上了这行，清空图片
+            target.setImage(null);
+            target.setEffect(null);
             return;
         }
-        ImageView view = ATileAssets.viewFor(variant);
+
+        ImageView view = ATileAssets.viewForTile(variant, row, column, TILE_SIZE);
         if (view == null) {
-            // 图集缺失或加载失败：隐藏贴图层，纯色底与其余行为不变
             target.setVisible(false);
-            target.setImage(null); // 👈 加上了这行，清空图片
+            target.setImage(null);
+            target.setEffect(null);
             return;
         }
         target.setImage(view.getImage());
         target.setViewport(view.getViewport());
-        target.setFitWidth(view.getFitWidth());
-        target.setFitHeight(view.getFitHeight());
-        // 居中定位（决策 D-G1）：32×32 居中于 44×44 格内，四周留 6px 底色边
-        target.setX(column * TILE_SIZE + (TILE_SIZE - target.getFitWidth()) / 2.0);
-        target.setY(row * TILE_SIZE + (TILE_SIZE - target.getFitHeight()) / 2.0);
+
+        boolean soilTexture = variant == GroundVariant.TILLED || variant == GroundVariant.WET;
+        // 草地铺满 44×44；耕地缩进 1px，让底层 #A97850 自然形成极细格界。
+        // 这是纯表现层，不添加 SoilState，也不会改变 12×12/44×44 的点击坐标。
+        double inset = soilTexture ? 1.0 : 0.0;
+        double visualSize = TILE_SIZE - inset * 2.0;
+        target.setFitWidth(visualSize);
+        target.setFitHeight(visualSize);
+        target.setX(column * TILE_SIZE + inset);
+        target.setY(row * TILE_SIZE + inset);
+
+        boolean locked = plotType == FarmPlot.FARM_PLOT
+                && soil != null
+                && soil.getState() == SoilState.LOCKED;
+        target.setOpacity(statusTint ? 0.46 : (locked ? 0.70 : 1.0));
+
+        // 每格只有极轻微、确定性的明暗差，避免重新变成一整块纯色矩形；
+        // 不使用随机数，因此不会污染 RandomProvider/存档复现。
+        double[] brightnessOffsets = {-0.025, -0.008, 0.010, 0.022};
+        double subtle = brightnessOffsets[Math.floorMod(row * 5 + column * 3, brightnessOffsets.length)];
+
+        if (variant == GroundVariant.WET) {
+            ColorAdjust wetAdjust = new ColorAdjust();
+            wetAdjust.setBrightness(-0.12 + subtle);
+            wetAdjust.setSaturation(0.08);
+            wetAdjust.setHue(-0.04);
+            target.setEffect(wetAdjust);
+        } else if (variant == GroundVariant.TILLED) {
+            ColorAdjust soilAdjust = new ColorAdjust();
+            soilAdjust.setBrightness(subtle);
+            target.setEffect(soilAdjust);
+        } else if (locked) {
+            ColorAdjust lockedAdjust = new ColorAdjust();
+            lockedAdjust.setBrightness(-0.12);
+            lockedAdjust.setSaturation(-0.20);
+            target.setEffect(lockedAdjust);
+        } else {
+            target.setEffect(null);
+        }
         target.setVisible(true);
     }
 
@@ -584,7 +658,7 @@ public class FarmView extends Pane {
             cropSprite.setImage(null); // 👈 加上了这行，清空图片
             return;
         }
-        ImageView view = AImageAssets.viewFor(crop.getCropType(), crop.getGrowthStage());
+        ImageView view = AImageAssets.viewForTile(crop.getCropType(), crop.getGrowthStage(), 40);
         if (view == null) {
             // 贴图缺失或枚举坏数据：隐藏贴图，方块逻辑原样（含 MATURE 整格高亮）
             cropSprite.setVisible(false);
@@ -597,7 +671,7 @@ public class FarmView extends Pane {
         cropSprite.setFitHeight(view.getFitHeight());
         cropSprite.setPreserveRatio(view.isPreserveRatio());
         cropSprite.setSmooth(view.isSmooth());
-        // 底对齐水平居中（决策 D1）：放大后高于格子时向上越界，不裁切不缩小
+        // P4：最大 40×40、底对齐水平居中，统一视觉锚点，避免作物悬空/越格
         cropSprite.setX(column * TILE_SIZE + (TILE_SIZE - cropSprite.getFitWidth()) / 2.0);
         cropSprite.setY((row + 1) * TILE_SIZE - cropSprite.getFitHeight());
         cropSprite.setVisible(true);
@@ -613,10 +687,23 @@ public class FarmView extends Pane {
         int row = soil.getRow();
         int column = soil.getColumn();
         FarmPlot plotType = farm.getPlotType(row, column);
+
+        Crop crop = soil.getCrop();
+        UUID cropUuid = crop == null ? null : crop.getCropUuid();
+        GrowthStage previousStage = cropUuid == null ? null : lastRenderedStages.get(cropUuid);
+        GrowthStage currentStage = crop == null ? null : crop.getGrowthStage();
+
         tiles[row][column].setFill(tileColorFor(plotType, soil));
         updateGroundTexture(row, column, plotType, soil);
         updateCropBlock(row, column, plotType, soil);
         refreshTooltip(soil);
+
+        if (cropUuid != null && currentStage != null) {
+            lastRenderedStages.put(cropUuid, currentStage);
+            if (previousStage != null && previousStage != currentStage) {
+                animateGrowthStageChange(soil, currentStage == GrowthStage.MATURE);
+            }
+        }
     }
 
     /**
@@ -688,6 +775,25 @@ public class FarmView extends Pane {
         menuBox.setLayoutX(Math.max(0, x));
         menuBox.setLayoutY(Math.max(0, y));
         menuBox.setVisible(true);
+        menuBox.toFront();
+    }
+
+    /**
+     * 把操作菜单提升到与地图同尺寸的上层 Pane。正式 DecorationOverlayView 调用本方法，
+     * 让播种/浇水/施肥卡片永远高于装饰；FarmView 单独测试时仍保持原父节点。
+     */
+    public void promoteMenuTo(Pane host) {
+        if (host == null || host == menuHost) {
+            return;
+        }
+        if (menuBox.getParent() instanceof Pane oldHost) {
+            oldHost.getChildren().remove(menuBox);
+        }
+        host.getChildren().add(menuBox);
+        menuHost = host;
+        if (menuBox.isVisible()) {
+            menuBox.toFront();
+        }
     }
 
     /** 收起操作菜单（UI规范 §12：默认隐藏）。 */
@@ -726,15 +832,7 @@ public class FarmView extends Pane {
     public Button createMenuButton(String text) {
         Button button = new Button(text);
         button.setPrefSize(BUTTON_WIDTH, BUTTON_HEIGHT);
-        button.setOnMouseEntered(event -> {
-            if (!button.isDisabled()) {
-                button.setStyle(STYLE_BTN_HOVER);
-            }
-        });
-        button.setOnMouseExited(event -> applyButtonStyle(button, button.isDisabled()));
-        button.disabledProperty().addListener((observable, oldValue, disabled) ->
-                applyButtonStyle(button, disabled));
-        applyButtonStyle(button, false);
+        button.getStyleClass().addAll("primary-button", "farm-action-button");
         return button;
     }
 
@@ -754,14 +852,87 @@ public class FarmView extends Pane {
         tooltips[soil.getRow()][soil.getColumn()].setText(tooltipTextFor(soil, currentGameDay));
     }
 
+    /** P4：开垦反馈。 */
+    public void animateReclaim(Soil soil) {
+        animateTileFlash(soil, COLOR_HIGHLIGHT, 0.42);
+    }
+
+    /** P4：播种反馈，先闪格再轻微弹出作物。 */
+    public void animatePlant(Soil soil) {
+        animateTileFlash(soil, COLOR_GRASS, 0.30);
+        animateGrowthStageChange(soil, false);
+    }
+
+    /** P4：浇水反馈。 */
+    public void animateWater(Soil soil) {
+        animateTileFlash(soil, Color.rgb(0x75, 0xB7, 0xD9), 0.40);
+    }
+
+    /** P4：施肥反馈。 */
+    public void animateFertilize(Soil soil) {
+        animateTileFlash(soil, COLOR_HIGHLIGHT, 0.36);
+        animateGrowthStageChange(soil, false);
+    }
+
+    /** P4：收获反馈。 */
+    public void animateHarvest(Soil soil) {
+        animateTileFlash(soil, COLOR_HIGHLIGHT, 0.44);
+    }
+
+    private void animateGrowthStageChange(Soil soil, boolean mature) {
+        if (soil == null) {
+            return;
+        }
+        ImageView sprite = cropSprites[soil.getRow()][soil.getColumn()];
+        if (sprite == null || !sprite.isVisible()) {
+            return;
+        }
+        ScaleTransition scale = new ScaleTransition(Duration.millis(mature ? 360 : 220), sprite);
+        scale.setFromX(mature ? 0.78 : 0.90);
+        scale.setFromY(mature ? 0.78 : 0.90);
+        scale.setToX(mature ? 1.10 : 1.0);
+        scale.setToY(mature ? 1.10 : 1.0);
+        scale.setAutoReverse(mature);
+        scale.setCycleCount(mature ? 2 : 1);
+        scale.play();
+    }
+
+    private void animateTileFlash(Soil soil, Color color, double opacity) {
+        if (soil == null) {
+            return;
+        }
+        Rectangle flash = new Rectangle(
+                soil.getColumn() * TILE_SIZE,
+                soil.getRow() * TILE_SIZE,
+                TILE_SIZE,
+                TILE_SIZE);
+        flash.setFill(Color.color(color.getRed(), color.getGreen(), color.getBlue(), opacity));
+        flash.setMouseTransparent(true);
+        getChildren().add(flash);
+        flash.toFront();
+        selectionRect.toFront();
+        if (menuHost == this) {
+            menuBox.toFront();
+        }
+
+        FadeTransition fade = new FadeTransition(Duration.millis(320), flash);
+        fade.setFromValue(1.0);
+        fade.setToValue(0.0);
+        fade.setOnFinished(event -> getChildren().remove(flash));
+        fade.play();
+    }
+
     private void buildMenu() {
         menuBox.setPadding(MENU_PADDING);
-        menuBox.setStyle("-fx-background-color: #FFF3DD;"
-                + "-fx-background-radius: " + MENU_RADIUS + ";");
+        menuBox.getStyleClass().add("farm-action-menu");
+        UiTheme.apply(menuBox);
         menuBox.setVisible(false);
     }
 
     private void applyButtonStyle(Button button, boolean disabled) {
-        button.setStyle(disabled ? STYLE_BTN_DISABLED : STYLE_BTN_NORMAL);
+        // 保留方法签名供历史代码兼容；P4 以后四态统一由 CSS :hover/:pressed/:disabled 管理。
+        if (!button.getStyleClass().contains("primary-button")) {
+            button.getStyleClass().add("primary-button");
+        }
     }
 }

@@ -5,13 +5,12 @@ import com.fieldstory.farm.manager.OfflineStartupStep;
 import com.fieldstory.farm.manager.SceneManager;
 import com.fieldstory.farm.model.Crop;
 import com.fieldstory.farm.model.CropMemory;
-import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.Decoration;
 import com.fieldstory.farm.model.EventState;
 import com.fieldstory.farm.model.Farm;
 import com.fieldstory.farm.model.FarmGameModel;
+import com.fieldstory.farm.model.FarmRank;
 import com.fieldstory.farm.model.GameState;
-import com.fieldstory.farm.model.GrowthStage;
 import com.fieldstory.farm.model.OfflineSimulationResult;
 import com.fieldstory.farm.model.Player;
 import com.fieldstory.farm.model.Soil;
@@ -23,10 +22,12 @@ import com.fieldstory.farm.persistence.FarmStateAdapter;
 import com.fieldstory.farm.persistence.SaveSlot;
 import com.fieldstory.farm.persistence.SaveSlotInfo;
 import com.fieldstory.farm.service.BuffService;
+import com.fieldstory.farm.service.AudioService;
 import com.fieldstory.farm.service.CollectionService;
 import com.fieldstory.farm.service.DecorationService;
 import com.fieldstory.farm.service.FarmRankService;
 import com.fieldstory.farm.service.FarmScoreService;
+import com.fieldstory.farm.service.FertilizerService;
 import com.fieldstory.farm.service.GraduationService;
 import com.fieldstory.farm.service.GrowthService;
 import com.fieldstory.farm.service.HarvestOutcome;
@@ -34,41 +35,64 @@ import com.fieldstory.farm.service.HarvestResult;
 import com.fieldstory.farm.service.HarvestService;
 import com.fieldstory.farm.service.HarvestTransactionService;
 import com.fieldstory.farm.service.LandService;
+import com.fieldstory.farm.service.LandUnlockPriceProvider;
+import com.fieldstory.farm.service.LandUnlockService;
+import com.fieldstory.farm.service.LegendaryFirstRewardService;
 import com.fieldstory.farm.service.LegendaryService;
+import com.fieldstory.farm.service.LogService;
 import com.fieldstory.farm.service.MemoryService;
 import com.fieldstory.farm.service.OfflineSimulationService;
 import com.fieldstory.farm.service.PlantingService;
 import com.fieldstory.farm.service.QualityService;
 import com.fieldstory.farm.service.SetService;
+import com.fieldstory.farm.service.ShowcaseService;
 import com.fieldstory.farm.service.ShopService;
 import com.fieldstory.farm.service.WateringService;
 import com.fieldstory.farm.service.WitherService;
+import com.fieldstory.farm.service.WorldSimulationService;
 import com.fieldstory.farm.service.economy.EconomyService;
 import com.fieldstory.farm.service.economy.impl.EconomyServiceImpl;
 import com.fieldstory.farm.service.impl.BasicBuffService;
+import com.fieldstory.farm.service.impl.BasicAudioService;
 import com.fieldstory.farm.service.impl.BasicCollectionService;
 import com.fieldstory.farm.service.impl.BasicDecorationService;
 import com.fieldstory.farm.service.impl.BasicFarmRankService;
 import com.fieldstory.farm.service.impl.BasicFarmScoreService;
+import com.fieldstory.farm.service.impl.BasicFertilizerService;
 import com.fieldstory.farm.service.impl.BasicGraduationService;
 import com.fieldstory.farm.service.impl.BasicGrowthService;
 import com.fieldstory.farm.service.impl.BasicHarvestTransactionService;
 import com.fieldstory.farm.service.impl.BasicLandService;
+import com.fieldstory.farm.service.impl.BasicLandUnlockService;
+import com.fieldstory.farm.service.impl.BasicLegendaryFirstRewardService;
 import com.fieldstory.farm.service.impl.BasicLegendaryService;
+import com.fieldstory.farm.service.impl.BasicLogService;
 import com.fieldstory.farm.service.impl.BasicMemoryService;
+import com.fieldstory.farm.service.impl.BasicOfflineSimulationService;
 import com.fieldstory.farm.service.impl.BasicPlantingService;
 import com.fieldstory.farm.service.impl.BasicQualityService;
 import com.fieldstory.farm.service.impl.BasicSetService;
+import com.fieldstory.farm.service.impl.BasicShowcaseService;
 import com.fieldstory.farm.service.impl.BasicShopService;
 import com.fieldstory.farm.service.impl.BasicWateringService;
 import com.fieldstory.farm.service.impl.BasicWitherService;
+import com.fieldstory.farm.service.impl.BasicWorldSimulationService;
+import com.fieldstory.farm.service.impl.BasicWorldTimeService;
+import com.fieldstory.farm.service.impl.CropMemoryFactRecorder;
 import com.fieldstory.farm.util.GameConstants;
-import com.fieldstory.farm.util.RandomProvider;
+import com.fieldstory.farm.util.JsonLandUnlockPriceProvider;
 import com.fieldstory.farm.view.BusinessToolbarView;
+import com.fieldstory.farm.view.AudioSettingsPopupView;
 import com.fieldstory.farm.view.CollectionPopupView;
 import com.fieldstory.farm.view.DecorationOverlayView;
 import com.fieldstory.farm.view.FarmView;
+import com.fieldstory.farm.view.GraduationPopupView;
+import com.fieldstory.farm.view.LandUnlockPopupView;
 import com.fieldstory.farm.view.StatusView;
+import com.fieldstory.farm.view.ShowcasePopupView;
+import javafx.animation.FadeTransition;
+import javafx.animation.ParallelTransition;
+import javafx.animation.ScaleTransition;
 import javafx.fxml.FXML;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -77,8 +101,13 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.util.Duration;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.function.Consumer;
+import java.util.function.UnaryOperator;
 
 /**
  * 主界面控制器（E 场景组装：开始按钮装配 A/B/C/D 各模块，构成可玩最小闭环）。
@@ -122,7 +151,7 @@ public class MainController {
         this.gameManager = gameManager;
     }
 
-    /** E P2：B 提供的离线模拟实现；未注入时跳过离线结算（等价于"本局无离线"）。 */
+    /** E P2：测试可注入离线模拟实现；正式运行未注入时由装配层创建 BasicOfflineSimulationService。 */
     private OfflineSimulationService offlineSimulationService;
 
     /**
@@ -138,9 +167,6 @@ public class MainController {
     /** 本次会话是否已完成装配（防止重复点击重复装配）。 */
     private boolean assembled = false;
 
-    /** 上次记录的游戏日（跨天成长推进基准；-1 表示尚未初始化）。 */
-    private int lastGrowthDay = -1;
-
     @FXML
     private void initialize() {
         welcomeText.setText("欢迎来到田野故事农场，选一档开始你的故事。");
@@ -152,43 +178,6 @@ public class MainController {
     // 入口界面样式（UI美术设计规范 §13 按钮 / §14 主色表 / §16 组件）
     // ==================================================================
 
-    /** 按钮 Normal：#A97850（规范 §13「正常」）。 */
-    private static final String BUTTON_NORMAL_STYLE =
-            "-fx-background-color: #A97850;"
-                    + "-fx-background-radius: 10;"
-                    + "-fx-text-fill: #FFF3DD;"
-                    + "-fx-font-size: 16;"
-                    + "-fx-cursor: hand;";
-
-    /** 按钮 Hover / Pressed：#C28B5A（规范 §13「悬停」）。 */
-    private static final String BUTTON_HOVER_STYLE =
-            "-fx-background-color: #C28B5A;"
-                    + "-fx-background-radius: 10;"
-                    + "-fx-text-fill: #FFF3DD;"
-                    + "-fx-font-size: 16;"
-                    + "-fx-cursor: hand;";
-
-    /** 按钮 Disabled：#CCCCCC（规范 §13「禁用」）。 */
-    private static final String BUTTON_DISABLED_STYLE =
-            "-fx-background-color: #CCCCCC;"
-                    + "-fx-background-radius: 10;"
-                    + "-fx-text-fill: #FFF3DD;"
-                    + "-fx-font-size: 16;";
-
-    /** 存档行卡片：比面板略深的米色 + 木色细描边。 */
-    private static final String SLOT_ROW_STYLE =
-            "-fx-background-color: #F7E8C9;"
-                    + "-fx-background-radius: 10;"
-                    + "-fx-border-color: #8B5E3C;"
-                    + "-fx-border-radius: 10;"
-                    + "-fx-border-width: 1;";
-
-    private static final String SLOT_SUMMARY_STYLE =
-            "-fx-text-fill: #493526; -fx-font-size: 14;";
-
-    private static final String EMPTY_HINT_STYLE =
-            "-fx-text-fill: #8B5E3C; -fx-font-size: 14;";
-
     /**
      * 统一按钮四态（Normal / Hover / Pressed / Disabled），与 A/B 模块既有实现
      * （{@code SeedQuickBuyView}、{@code FarmView}）保持一致；禁用态不响应鼠标悬停。
@@ -199,21 +188,9 @@ public class MainController {
         }
         button.setPrefSize(width, height);
         button.setMinSize(width, height);
-        button.setStyle(button.isDisabled() ? BUTTON_DISABLED_STYLE : BUTTON_NORMAL_STYLE);
-        button.setOnMouseEntered(event -> {
-            if (!button.isDisabled()) {
-                button.setStyle(BUTTON_HOVER_STYLE);
-            }
-        });
-        button.setOnMouseExited(event ->
-                button.setStyle(button.isDisabled() ? BUTTON_DISABLED_STYLE : BUTTON_NORMAL_STYLE));
-        button.setOnMousePressed(event -> {
-            if (!button.isDisabled()) {
-                button.setStyle(BUTTON_HOVER_STYLE);
-            }
-        });
-        button.setOnMouseReleased(event ->
-                button.setStyle(button.isDisabled() ? BUTTON_DISABLED_STYLE : BUTTON_NORMAL_STYLE));
+        if (!button.getStyleClass().contains("primary-button")) {
+            button.getStyleClass().add("primary-button");
+        }
     }
 
     // ==================================================================
@@ -230,7 +207,7 @@ public class MainController {
         if (infos.isEmpty()) {
             Label empty = new Label("还没有存档，点击「新建存档」开启第一段田野故事。");
             empty.setWrapText(true);
-            empty.setStyle(EMPTY_HINT_STYLE);
+            empty.getStyleClass().add("hint-text");
             slotList.getChildren().add(empty);
             return;
         }
@@ -250,7 +227,7 @@ public class MainController {
         }
         Label summary = new Label(text.toString());
         summary.setMinWidth(260);
-        summary.setStyle(SLOT_SUMMARY_STYLE);
+        summary.getStyleClass().add("slot-summary");
 
         Button loadButton = new Button("读取");
         loadButton.setDisable(!info.occupied());
@@ -264,7 +241,7 @@ public class MainController {
         HBox row = new HBox(12, summary, loadButton, newGameButton);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(8, 12, 8, 12));
-        row.setStyle(SLOT_ROW_STYLE);
+        row.getStyleClass().add("save-slot-row");
         return row;
     }
 
@@ -333,16 +310,43 @@ public class MainController {
         // E P3：收集图鉴 / FarmScore / 毕业——全部绑定当前 GameState，随存档往返（验收规范 §一百三十二）。
         CollectionService collectionService = new BasicCollectionService(state);
         FarmScoreService farmScoreService = new BasicFarmScoreService(state);
+        FarmRankService farmRankService = new BasicFarmRankService();
         GraduationService graduationService = new BasicGraduationService(state, farmScoreService);
 
         Farm farm = new BasicFarm();
         FarmGameModel model = new FarmGameModel();
         model.setFarm(farm);
+        // P4 表现层单例：不进入任何领域规则或存档。
+        AudioService audioService = BasicAudioService.shared();
+
+        // P4 评价升级只做表现反馈，不参与 FarmScore/Graduation 判定。
+        // 记录装配时的当前评价，随后每次真实加分动作完成后比较；147 由毕业音效独占。
+        FarmRank[] presentedRank = {farmRankService.rankOf(farmScoreService.totalScore())};
+        UnaryOperator<String> withRankPresentation = baseMessage -> {
+            FarmRank current = farmRankService.rankOf(farmScoreService.totalScore());
+            FarmRank previous = presentedRank[0];
+            presentedRank[0] = current;
+            if (previous != null
+                    && current.ordinal() > previous.ordinal()
+                    && !current.isGraduationRank()) {
+                audioService.playSfx(AudioService.Sfx.RANK_UP);
+                return baseMessage + " · 评价升级：" + current.getDisplayName();
+            }
+            return baseMessage;
+        };
 
         // 恢复 A 的土地/作物快照、D 的时钟（精确到分钟）、天气。
         FarmStateAdapter.restore(state, farm);
         restoreClock(state, model);
         restoreWeather(state, model);
+
+        // B P3：解锁价格唯一来自 balance-config。P3 文档未冻结正式数值，当前资源是
+        // 明确标记的测试配置；P4 只替换 JSON 平衡值，不改 Controller/Service。
+        LandUnlockPriceProvider landUnlockPriceProvider =
+                JsonLandUnlockPriceProvider.fromClasspath();
+        if (newGame) {
+            applyConfiguredLockedPlots(farm, landUnlockPriceProvider);
+        }
 
         // P2：背包 = 存档聚合里的同一个实例（读档时已由 SqliteSaveService 填好），
         // 收获肥料奖励会直接进它，保存时也直接取它，不存在第二份背包。
@@ -357,6 +361,10 @@ public class MainController {
             }
         }
         restoreEvent(state, model);
+        CropMemoryFactRecorder memoryFacts = new CropMemoryFactRecorder(memoryService);
+        // v5 旧档兼容：历史版本只把施肥次数存在 CropMemory。启动时把两侧事实对齐，
+        // 此后 Crop 是成长/每日限制的运行态来源，Memory 继续负责永久档案。
+        synchronizeFertilizerRuntimeFromMemories(farm, memoryService);
 
         // E 存档前统一回填运行态。
         // 存档 gameDay 直接取 GameClock.getGameDay()（第 1 天起）
@@ -366,46 +374,134 @@ public class MainController {
             state.setWorldTotalMinutes(model.getWorldTimeTotalMinutes());
             state.setCurrentWeather(model.getWeatherState().getWeatherType());
             state.setWeatherDayIndex(model.getWeatherState().getDayIndex());
+            LocalDateTime saveRealTime = model.getGameClock().getRealTime();
+            model.getGameClock().setLastRealTime(saveRealTime);
+            state.setLastRealTime(saveRealTime.toString());
             captureMemories(state, memoryService);
             state.setActiveEvent(model.getEventState());
-            // E P3：落盘前评估毕业；此刻时钟/天数刚刷新，毕业时间戳精确，且首次只触发一次（验收规范 §一百二十九）。
-            graduationService.evaluateAndGraduate();
         });
-
-        // E P2 启动顺序「离线一段」：统一时钟算离线时长 → B 的离线模拟 → 有进度则事务落盘。
-        // 离线日志（offline_log / OfflineLogController / OfflineLogPopupView）属 B，E 不生成。
-        runOfflineSimulationStep(model);
 
         // B P0 经济入口保持唯一 Player。
         // 新游戏严格保持 Player/GameManager 的正式初始状态：500 金币、三种种子库存均为 0。
-        // 不得用 buySeed() “赠送”起始种子，否则会真实扣款 135 金币，导致 500 -> 365。
+        // 不得用 buySeed() “赠送”起始种子，否则会真实扣款。
         EconomyService economy = new EconomyServiceImpl(player);
 
-        // A/C/D 已有服务保持当前主干实现。
+        // A 基础服务。
         LandService land = new BasicLandService(economy);
+        LandUnlockService landUnlockService = new BasicLandUnlockService(
+                economy, landUnlockPriceProvider);
+        LandUnlockController landUnlockController = new LandUnlockController(landUnlockService);
         PlantingService planting = new BasicPlantingService(economy, model.getGameClock());
         WateringService watering = new BasicWateringService();
-        GrowthService growth = new BasicGrowthService(watering);
-        HarvestService harvest = buildHarvestService(
-                economy, land, model, memoryService, inventory, collectionService, gameManager::saveNow);
-        WitherService wither = new BasicWitherService();
 
-        // A 的 FarmView 不改；B 装饰通过透明覆盖层扩展 CENTER。
-        FarmViewController farmViewController = new FarmViewController(
-                farm, land, planting, watering, harvest, model.getGameClock(), economy);
-        FarmView farmView = farmViewController.getView();
-
-        // B P1：装饰状态直接绑定当前 GameState；E 的 SqliteSaveService 负责最终落盘。
+        // B P1/P3：先完成 Decoration + Set + Buff，再把强类型结果交给 A/C 消费。
         DecorationService decorationService = new BasicDecorationService(farm, state);
-        // E P3：以当前拥有的装饰回填图鉴（兼容 P3 之前的旧档：拥有即已购买、即已解锁）。
         syncDecorations(collectionService, decorationService);
-        // E P3：套装 = 全部成员「拥有且放置」；collected 永久、active 随放置实时变化（验收规范 §一百一十八）。
-        // 读档后立即重算一次，使 active 与已恢复的放置状态一致。
         SetService setService = new BasicSetService(decorationService, state);
         setService.refresh();
-        BuffService buffService = new BasicBuffService(decorationService);
-        ShopService shopService = new BasicShopService(economy, decorationService);
 
+        // 关键：生产 BuffService 必须携带 SetService。
+        // 自然之息进入成长倍率；丰收之魂/传奇之光仍通过 SetService 独立接口消费，
+        // 不塞入 BuffSnapshot.priceRate，避免最终售价/传奇概率重复加成。
+        BuffService buffService = new BasicBuffService(decorationService, setService);
+
+        // E P3：分数变化后立即评估 147，而不是等到下一次手动保存。
+        GraduationController graduationController = new GraduationController(
+                state, model, graduationService);
+
+        // C P1/P2/P3：施肥、首次传奇奖励、日志、展示台。
+        FertilizerService fertilizerService = new BasicFertilizerService(memoryService);
+        LegendaryFirstRewardService firstRewardService =
+                new BasicLegendaryFirstRewardService(collectionService);
+        LogService logService = new BasicLogService();
+        ShowcaseService showcaseService = new BasicShowcaseService(memoryService);
+        ShowcaseController showcaseController = new ShowcaseController(showcaseService);
+
+        // A 成长只消费最终 OperationRate：
+        // 1 + (基础浇水 bonus × B wateringMultiplier)
+        //   + (C 施肥 bonus × B fertilizerMultiplier)。
+        // A 不重算 B/C 领域规则。
+        GrowthService growth = new BasicGrowthService(
+                watering,
+                crop -> resolveOperationRate(
+                        farm, crop, watering, fertilizerService, buffService));
+
+        // C 完整收获：品质装饰分、DecorationPriceRate、SetPriceRate、传奇套装、
+        // 首次奖励、图鉴、Memory、HarvestLog 全部进入同一业务入口。
+        HarvestService harvest = buildHarvestService(
+                economy, land, model, memoryService, inventory, collectionService,
+                buffService, setService, firstRewardService, logService,
+                outcome -> {
+                    showcaseController.refresh();
+                    if (outcome.isLegendary()) {
+                        audioService.playSfx(AudioService.Sfx.LEGENDARY);
+                    } else if (outcome.getQuality() == com.fieldstory.farm.model.Quality.RARE
+                            || outcome.getQuality() == com.fieldstory.farm.model.Quality.EPIC) {
+                        audioService.playSfx(AudioService.Sfx.RARE);
+                    }
+                    setStatusMessage(withRankPresentation.apply(
+                            "收获：" + outcome.getQuality().getDisplayName()
+                                    + " · +" + outcome.getSellPrice() + " 金币"));
+                    graduationController.evaluateNow();
+                    gameManager.saveNow();
+                });
+        WitherService wither = new BasicWitherService();
+
+        // A P2：正式生产世界引擎。在线 FarmController 与后续离线模拟必须复用这一套
+        // Growth / Wither / Weather / Event 领域规则，MainController 不再自行计算成长或枯萎。
+        WorldSimulationService worldSimulationService = new BasicWorldSimulationService(
+                growth, wither, model.getWeatherService(), model.getEventService());
+
+        // 第二轮：正式生产离线链。测试若显式注入 OfflineSimulationService 则优先使用；
+        // 正式运行默认创建 BasicOfflineSimulationService，并与在线 FarmController 复用
+        // 同一个 WorldSimulationService / GrowthService / BuffService。
+        OfflineSimulationService startupOfflineSimulation = offlineSimulationService != null
+                ? offlineSimulationService
+                : new BasicOfflineSimulationService(
+                        farm,
+                        model.getGameClock(),
+                        new BasicWorldTimeService(),
+                        worldSimulationService,
+                        growth,
+                        model.getWeatherService(),
+                        model.getWeatherState(),
+                        model.getEventService(),
+                        model.getEventState(),
+                        buffService,
+                        memoryService);
+
+        // 固定启动顺序：读档/恢复世界状态 → 算离线时长 → 离线模拟 → 有进度立即保存 → 再建 FarmView。
+        runOfflineSimulationStep(model, startupOfflineSimulation);
+
+        // P4 表现层：进入农场后按当前事件选择普通/事件主题。
+        audioService.updateForEvent(model.getEventState().getEventType());
+
+        // A ViewController：保留 LOCKED 请求出口，同时增加 C 施肥/Memory/背包接线。
+        FarmViewController farmViewController = new FarmViewController(
+                farm, land, planting, watering, harvest, model.getGameClock(), economy,
+                fertilizerService, memoryService, inventory, audioService);
+        FarmView farmView = farmViewController.getView();
+
+        // B P3：A 的 LOCKED 点击出口正式接到 B 的确认弹窗/解锁服务；成功后立即刷新并保存。
+        LandUnlockPopupView landUnlockPopup = new LandUnlockPopupView(landUnlockController);
+        farmViewController.setOnLockedPlotClicked(soil -> landUnlockPopup.showFor(farmView, soil));
+        landUnlockController.addOnUnlockSucceeded(() -> {
+            farmView.refreshAll();
+            audioService.playSfx(AudioService.Sfx.PURCHASE);
+            setStatusMessage("土地解锁成功，已自动保存。");
+            gameManager.saveNow();
+        });
+
+        // E P3：147 首次毕业提供最小可见 UI；P4 再补动画/音效。
+        GraduationPopupView graduationPopup = new GraduationPopupView();
+        graduationController.setOnGraduated(graduation -> {
+            setStatusMessage("FarmScore 147/147：永恒花园达成！");
+            audioService.playSfx(AudioService.Sfx.GRADUATION);
+            graduationPopup.showFor(farmView, graduation);
+        });
+
+        // B 商店与装饰控制器继续使用同一 decoration/buff/set 实例。
+        ShopService shopService = new BasicShopService(economy, decorationService);
         DecorationController decorationController =
                 new DecorationController(decorationService, buffService);
         ShopController shopController = new ShopController(shopService);
@@ -416,34 +512,61 @@ public class MainController {
         SceneManager.getInstance().mount(SceneManager.Slot.CENTER, decorationOverlay);
 
         // 购买/放置/移动/收回成功后自动保存；B 不直接写 SQL。
-        shopController.addOnPurchaseSucceeded(gameManager::saveNow);
-        // E P3：放置/移动/收回成功 → 先重算套装 collected/active，再落盘（collected 才计入 FarmScore）。
-        decorationController.addOnChanged(() -> {
-            setService.refresh();
+        shopController.addOnPurchaseSucceeded(() -> {
+            audioService.playSfx(AudioService.Sfx.PURCHASE);
             gameManager.saveNow();
         });
-        // E P3：首次成功购买某类型装饰即永久解锁图鉴（去重）；随后 onPurchaseSucceeded 触发落盘。
+        // E P3：放置/移动/收回成功 → 先重算套装 collected/active，再落盘。
+        decorationController.addOnChanged(() -> {
+            setService.refresh();
+            setStatusMessage(withRankPresentation.apply("装饰布局已更新。"));
+            graduationController.evaluateNow();
+            gameManager.saveNow();
+        });
+        // E P3：首次成功购买某类型装饰即永久解锁图鉴。
         shopController.addOnDecorationPurchased(() -> {
             syncDecorations(collectionService, decorationService);
             setService.refresh();
+            setStatusMessage(withRankPresentation.apply("装饰图鉴已更新。"));
+            graduationController.evaluateNow();
         });
 
         BusinessToolbarView businessToolbar = new BusinessToolbarView(
                 shopController, decorationController, decorationOverlay);
 
-        // D 状态栏保持原实现；B 经营入口作为独立节点由 E 装配。
+        // D 状态栏保持原实现；B 经营入口与 C 展示台入口由 E 装配。
         StatusView statusView = new StatusView(model, player);
-        // E P3：图鉴入口聚合收集 / FarmScore / FarmRank / 套装四个服务（验收规范 §一百二十七）。
-        FarmRankService farmRankService = new BasicFarmRankService();
         CollectionController collectionController = new CollectionController(
                 collectionService, farmScoreService, farmRankService, setService);
-        buildTopBar(statusView, businessToolbar, collectionController);
+        buildTopBar(statusView, businessToolbar, collectionController, showcaseController, audioService);
 
-        // 主循环：沿用当前主干的天气 + 枯萎 + 成长流程。
-        lastGrowthDay = model.getGameClock().getGameDay();
-        FarmController farmLoop = new FarmController(model, statusView);
-        farmLoop.setOnDayChanged(() -> applyDailyGrowth(
-                farm, growth, wither, farmViewController, model));
+        // 正式生产主链：FarmController -> WorldSimulationService。
+        // Decoration / Set Growth Buff 与 Wither Buff 仅通过窄 resolver 注入，
+        // MainController 不再维护第二套成长/枯萎算法。
+        FarmController farmLoop = new FarmController(
+                model,
+                statusView,
+                worldSimulationService,
+                buffService::getGrowthRate,
+                buffService::getWitherProbabilityMultiplier);
+
+        // 最小事实桥：世界引擎只产“新成熟列表 / 日结摘要”；
+        // C/E 在外层消费这些事实写 Memory，并在每次推进后刷新 UI。
+        farmLoop.setOnCropsMatured(crops ->
+                memoryFacts.recordMatured(crops, currentWorldHour(model)));
+        farmLoop.setOnDaySettled(result -> memoryFacts.recordDaily(farm, result));
+        farmLoop.setOnWorldAdvanced(() -> {
+            memoryFacts.recordActiveEvent(farm, model.getEventState());
+            audioService.updateForEvent(model.getEventState().getEventType());
+            farmViewController.getView().setCurrentGameDay(model.getGameClock().getGameDay());
+            farmViewController.getView().refreshAll();
+        });
+
+        // 兼容 P3 之前已经满收集但未写 graduation 的旧档：UI 已绑定后评估一次。
+        // 普通 146 或以下不会产生任何状态变化。
+        if (graduationController.evaluateNow()) {
+            gameManager.saveNow();
+        }
 
         // “开始新游戏”完成装配后立即建立正式存档。
         // GameManager.startNewGame() 本身只创建内存状态；若依赖窗口正常关闭才保存，
@@ -456,7 +579,11 @@ public class MainController {
         farmLoop.startGameLoop();
 
         assembled = true;
-        setStatusMessage("点击农田开始：开垦 → 播种 → 浇水 → 等待成长。");
+        if (graduationController.isGraduated()) {
+            setStatusMessage("FarmScore 147/147：永恒花园已达成。");
+        } else {
+            setStatusMessage("点击农田开始：开垦 → 播种 → 浇水 → 等待成长。");
+        }
     }
 
     /**
@@ -470,13 +597,23 @@ public class MainController {
         long savedMinutes = state.getWorldTotalMinutes();
         if (savedMinutes >= 0) {
             model.restoreWorldTime((int) savedMinutes);
-            return;
+        } else {
+            long savedDay = state.getGameDay();
+            if (savedDay > 0) {
+                int totalMinutes = (int) ((savedDay - 1) * GameConstants.MINUTES_PER_DAY
+                        + GameConstants.DAY_START);
+                model.restoreWorldTime(totalMinutes);
+            }
         }
-        long savedDay = state.getGameDay();
-        if (savedDay > 0) {
-            int totalMinutes = (int) ((savedDay - 1) * GameConstants.MINUTES_PER_DAY
-                    + GameConstants.DAY_START);
-            model.restoreWorldTime(totalMinutes);
+
+        String lastRealTime = state.getLastRealTime();
+        if (lastRealTime != null && !lastRealTime.isBlank()) {
+            try {
+                model.getGameClock().setLastRealTime(LocalDateTime.parse(lastRealTime.trim()));
+            } catch (DateTimeParseException malformed) {
+                // 旧档/坏数据没有可靠现实时间基准时按 0 分钟离线处理，绝不猜测。
+                model.getGameClock().setLastRealTime(null);
+            }
         }
     }
 
@@ -513,11 +650,39 @@ public class MainController {
      * （{@link OfflineSimulationResult#hasOfflineProgress()}），立即事务落盘，使"离开期间
      * 发生的变化"随存档固化。B 的离线日志/弹窗是紧随其后的步骤，不在此处实现。
      */
-    private void runOfflineSimulationStep(FarmGameModel model) {
+    private void runOfflineSimulationStep(FarmGameModel model,
+                                          OfflineSimulationService simulationService) {
         OfflineSimulationResult result =
-                OfflineStartupStep.run(model.getGameClock(), offlineSimulationService);
+                OfflineStartupStep.run(model.getGameClock(), simulationService);
         if (result != null && result.hasOfflineProgress()) {
             gameManager.saveNow();
+        }
+    }
+
+    /**
+     * 旧档兼容与双状态收口：Crop 驱动当前生命周期成长，CropMemory 驱动永久档案。
+     * 两边有一边记录更完整时取较新的事实，并立即对齐；不增加施肥次数，只搬运已有事实。
+     */
+    private static void synchronizeFertilizerRuntimeFromMemories(
+            Farm farm, MemoryService memoryService) {
+        if (farm == null || memoryService == null) {
+            return;
+        }
+        for (Soil soil : farm.getSoils()) {
+            Crop crop = soil == null ? null : soil.getCrop();
+            if (crop == null || crop.getCropUuid() == null) {
+                continue;
+            }
+            CropMemory memory = memoryService.findMemory(crop.getCropUuid())
+                    .orElseGet(() -> memoryService.createMemory(crop));
+            int count = Math.max(crop.getFertilizerCount(), memory.getFertilizerCount());
+            long lastDay = Math.max(
+                    crop.getLastFertilizedGameDay(),
+                    memory.getLastFertilizeGameDay());
+            crop.setFertilizerCount(count);
+            crop.setLastFertilizedGameDay(lastDay);
+            memory.setFertilizerCount(count);
+            memory.setLastFertilizeGameDay(lastDay);
         }
     }
 
@@ -525,6 +690,25 @@ public class MainController {
     private static void captureMemories(GameState state, MemoryService memoryService) {
         state.getMemories().clear();
         state.getMemories().addAll(memoryService.listAll());
+    }
+
+    /**
+     * 新游戏把 balance-config 中“存在价格”的农田设为 LOCKED。
+     *
+     * <p>不在 BasicFarm/Soil 硬编码坐标；读档也绝不重新上锁，已购买解锁的 EMPTY 状态
+     * 完全由 SQLite 快照恢复。
+     */
+    static void applyConfiguredLockedPlots(Farm farm, LandUnlockPriceProvider priceProvider) {
+        if (farm == null || priceProvider == null) {
+            return;
+        }
+        for (Soil soil : farm.getSoils()) {
+            if (soil != null
+                    && soil.getState() == com.fieldstory.farm.model.SoilState.EMPTY
+                    && priceProvider.findUnlockPrice(soil.getRow(), soil.getColumn()).isPresent()) {
+                soil.setState(com.fieldstory.farm.model.SoilState.LOCKED);
+            }
+        }
     }
 
     /**
@@ -558,10 +742,17 @@ public class MainController {
                                                       MemoryService memoryService,
                                                       Inventory inventory,
                                                       CollectionService collectionService,
-                                                      Runnable onCollected) {
+                                                      BuffService buffService,
+                                                      SetService setService,
+                                                      LegendaryFirstRewardService firstRewardService,
+                                                      LogService logService,
+                                                      Consumer<HarvestOutcome> onCollected) {
         QualityService qualityService = new BasicQualityService();
-        LegendaryService legendaryService = new BasicLegendaryService();
-        // 神秘商人：事件期间目标作物售价 ×2（规则 §四十九），倍率由 D 的状态决定、C 只读取
+
+        // 传奇之光只从 B.SetService#getLegendarySetBonusPercent() 进入。
+        LegendaryService legendaryService = new BasicLegendaryService(setService);
+
+        // 神秘商人：事件期间目标作物售价 ×2；C 只读取 D 的事件状态。
         EventPriceRateProvider priceRateProvider = cropType -> {
             EventState event = model.getEventState();
             if (cropType != null
@@ -572,9 +763,15 @@ public class MainController {
             }
             return 1.0;
         };
+
+        // 正式完整构造：
+        // FinalPrice = Base × Quality × Decoration × Set × Event
+        // DecorationPriceRate 与 SetPriceRate 在服务内部严格分离。
         HarvestTransactionService transaction = new BasicHarvestTransactionService(
                 economy, land, qualityService, legendaryService, memoryService,
-                model.getGameClock(), priceRateProvider);
+                model.getGameClock(), priceRateProvider,
+                firstRewardService, logService,
+                buffService, setService, collectionService);
 
         return new HarvestService() {
             @Override
@@ -584,17 +781,9 @@ public class MainController {
 
             @Override
             public HarvestResult harvest(Soil soil) {
-                Crop crop = soil == null ? null : soil.getCrop();
-                CropType cropType = crop == null ? null : crop.getCropType();
                 HarvestOutcome outcome = transaction.harvest(soil, inventory);
                 if (outcome.isSuccess()) {
-                    // E P3：真正收获 → 该项图鉴永久 COLLECTED；传说突破 → 记入传说图鉴
-                    // （验收规范 §一百一十一，去重由 CollectionState 保证）。随后触发落盘。
-                    collectionService.collectCrop(cropType, outcome.getQuality());
-                    if (outcome.isLegendary()) {
-                        collectionService.collectLegendary(cropType);
-                    }
-                    onCollected.run();
+                    onCollected.accept(outcome);
                 }
                 return outcome.getResult();
             }
@@ -602,48 +791,59 @@ public class MainController {
     }
 
     /**
-     * 跨天：滚动天气与随机事件 → 记录天气并判定枯萎 → 推进幸存作物成长 → 刷新农场。
+     * 组装完整 OperationRate：
+     * 1 + (基础浇水 bonus × B wateringMultiplier)
+     *   + (C 施肥 bonus × B fertilizerMultiplier)。
      */
-    private void applyDailyGrowth(Farm farm,
-                                  GrowthService growth,
-                                  WitherService wither,
-                                  FarmViewController farmViewController,
-                                  FarmGameModel model) {
-        int currentDay = model.getGameClock().getGameDay();
-        double elapsedDays = currentDay - lastGrowthDay;
-
-        if (elapsedDays > 0) {
-            WeatherType today = model.getWeatherService().rollDailyWeather(currentDay);
-            // P2：每天抽取当天事件（D 的规则入口；一天最多 1 个，验收 §九十）。
-            // 事件状态随后由存档回填钩子写入 active_event，重开时不会凭空消失。
-            model.getEventService().rollDailyEvent(currentDay);
-            double weatherRate = model.getWeatherService().getGrowthRate(today);
-            long worldTime = currentDay * 24L + model.getGameClock().getGameHour();
-
-            for (Soil soil : farm.getSoils()) {
-                Crop crop = soil.getCrop();
-                if (crop == null) {
-                    continue;
-                }
-
-                wither.recordDailyWeather(crop, today, currentDay, worldTime);
-                wither.judgeWither(
-                        crop,
-                        today,
-                        currentDay,
-                        BasicWitherService.WITHER_MITIGATION_P1,
-                        RandomProvider.nextDouble());
-
-                if (crop.getGrowthStage() != GrowthStage.MATURE
-                        && crop.getGrowthStage() != GrowthStage.WITHERED) {
-                    growth.applyGrowth(crop, elapsedDays, weatherRate);
-                }
-            }
+    private static double resolveOperationRate(Farm farm,
+                                               Crop crop,
+                                               WateringService wateringService,
+                                               FertilizerService fertilizerService,
+                                               BuffService buffService) {
+        if (crop == null) {
+            return 1.0;
         }
 
-        lastGrowthDay = currentDay;
-        farmViewController.getView().setCurrentGameDay(currentDay);
-        farmViewController.getView().refreshAll();
+        double wateringBonus = wateringService.calculateWaterGrowthBonus(crop);
+        double fertilizerBonus = fertilizerService.fertilizerGrowthRate(crop);
+
+        Soil soil = findSoilForCrop(farm, crop);
+        if (soil == null || crop.getCropType() == null) {
+            return 1.0 + wateringBonus + fertilizerBonus;
+        }
+
+        // B 的 OperationModifierBuff 只放大“成长 bonus”，不改变品质固定 +3/+8。
+        double wateringMultiplier = buffService.getWateringGrowthMultiplier(
+                soil.getRow(), soil.getColumn(), crop.getCropType());
+        double fertilizerMultiplier = buffService.getFertilizerGrowthMultiplier(
+                soil.getRow(), soil.getColumn(), crop.getCropType());
+
+        return 1.0
+                + wateringBonus * wateringMultiplier
+                + fertilizerBonus * fertilizerMultiplier;
+    }
+
+    private static Soil findSoilForCrop(Farm farm, Crop crop) {
+        if (farm == null || crop == null) {
+            return null;
+        }
+        for (Soil soil : farm.getSoils()) {
+            if (soil == null || soil.getCrop() == null) {
+                continue;
+            }
+            if (soil.getCrop() == crop
+                    || (crop.getCropUuid() != null
+                    && crop.getCropUuid().equals(soil.getCrop().getCropUuid()))) {
+                return soil;
+            }
+        }
+        return null;
+    }
+
+    /** 当前时钟转成项目统一的“游戏小时”口径（gameDay * 24 + gameHour）。 */
+    private static long currentWorldHour(FarmGameModel model) {
+        return (long) model.getGameClock().getGameDay() * 24L
+                + model.getGameClock().getGameHour();
     }
 
     /** 手动存档入口。 */
@@ -666,28 +866,44 @@ public class MainController {
      * 构建常驻顶栏：D 状态栏 + B 经营入口 + E 保存按钮 + 提示。
      */
     void buildTopBar(StatusView statusView, Node businessToolbar) {
-        buildTopBar(statusView, businessToolbar, null);
+        buildTopBar(statusView, businessToolbar, null, null, null);
     }
 
     /**
      * 构建常驻顶栏：D 状态栏 + B 经营入口 + E 保存/图鉴按钮 + 提示。
      *
-     * <p>{@code collectionController} 为 {@code null} 时不挂「图鉴」入口
-     * （兼容既有仅顶栏的测试）；装配游戏闭环时传入，展开 E 的收集图鉴（验收规范 §一百二十七）。
+     * <p>保留既有 3 参数签名，兼容原测试和调用。
      */
-    void buildTopBar(StatusView statusView, Node businessToolbar, CollectionController collectionController) {
+    void buildTopBar(StatusView statusView, Node businessToolbar,
+                     CollectionController collectionController) {
+        buildTopBar(statusView, businessToolbar, collectionController, null, null);
+    }
+
+    /** 完整顶栏：增加 C P3 展示台入口。 */
+    void buildTopBar(StatusView statusView, Node businessToolbar,
+                     CollectionController collectionController,
+                     ShowcaseController showcaseController) {
+        buildTopBar(statusView, businessToolbar, collectionController, showcaseController, null);
+    }
+
+    /** P4 完整顶栏：图鉴/展示台使用浮层，并提供声音设置入口。 */
+    void buildTopBar(StatusView statusView, Node businessToolbar,
+                     CollectionController collectionController,
+                     ShowcaseController showcaseController,
+                     AudioService audioService) {
         Button saveButton = new Button("保存进度");
         saveButton.setOnAction(event -> onSaveButtonClick());
         styleMenuButton(saveButton, 104, 32);
 
         topHintLabel = new Label();
-        topHintLabel.setStyle(SLOT_SUMMARY_STYLE);
+        topHintLabel.getStyleClass().add("slot-summary");
         HBox topBar = new HBox(16);
         topBar.getChildren().add(statusView);
         if (businessToolbar != null) {
             topBar.getChildren().add(businessToolbar);
         }
         topBar.getChildren().add(saveButton);
+
         if (collectionController != null) {
             CollectionPopupView collectionPopup = new CollectionPopupView(collectionController);
             Button collectionButton = new Button("图鉴");
@@ -695,9 +911,30 @@ public class MainController {
             styleMenuButton(collectionButton, 88, 32);
             topBar.getChildren().add(collectionButton);
         }
+
+        if (showcaseController != null) {
+            ShowcasePopupView showcasePopup = new ShowcasePopupView(showcaseController.getView());
+            Button showcaseButton = new Button("展示台");
+            showcaseButton.setOnAction(event -> {
+                showcaseController.refresh();
+                showcasePopup.toggleBelow(showcaseButton);
+            });
+            styleMenuButton(showcaseButton, 88, 32);
+            topBar.getChildren().add(showcaseButton);
+        }
+
+        if (audioService != null) {
+            AudioSettingsPopupView settingsPopup = new AudioSettingsPopupView(audioService);
+            Button settingsButton = new Button("设置");
+            settingsButton.setOnAction(event -> settingsPopup.toggleBelow(settingsButton));
+            styleMenuButton(settingsButton, 76, 32);
+            topBar.getChildren().add(settingsButton);
+        }
+
         topBar.getChildren().add(topHintLabel);
         topBar.setAlignment(Pos.CENTER_LEFT);
         topBar.setPadding(new Insets(6, 12, 6, 12));
+        topBar.getStyleClass().add("top-bar");
 
         SceneManager.getInstance().mount(SceneManager.Slot.TOP, topBar);
     }
@@ -709,6 +946,17 @@ public class MainController {
         }
         if (topHintLabel != null) {
             topHintLabel.setText(message);
+            // P4 最小反馈：收获品质/金币、评价升级等状态文字轻微“浮现”，
+            // 动画只作用于 Node 属性，不改变任何游戏时间或业务状态。
+            topHintLabel.setOpacity(0.35);
+            topHintLabel.setScaleX(0.97);
+            topHintLabel.setScaleY(0.97);
+            FadeTransition fade = new FadeTransition(Duration.millis(180), topHintLabel);
+            fade.setToValue(1.0);
+            ScaleTransition scale = new ScaleTransition(Duration.millis(180), topHintLabel);
+            scale.setToX(1.0);
+            scale.setToY(1.0);
+            new ParallelTransition(fade, scale).play();
         }
     }
 }

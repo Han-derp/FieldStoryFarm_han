@@ -2,6 +2,7 @@ package com.fieldstory.farm.persistence;
 
 import com.fieldstory.farm.manager.GameManager;
 import com.fieldstory.farm.model.Crop;
+import com.fieldstory.farm.model.CropMemory;
 import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.Farm;
 import com.fieldstory.farm.model.FarmGameModel;
@@ -57,8 +58,9 @@ class FarmPersistenceIntegrationTest {
         Farm farm = new BasicFarm();
         FarmStateAdapter.restore(state, farm); // 新档：全部 EMPTY
 
-        // 开垦一块地，并在另一块地种下作物
+        // 开垦一块地、保留一块 P3 LOCKED，并在另一块地种下作物
         farm.getSoil(2, 2).setState(SoilState.TILLED);
+        farm.getSoil(2, 3).setState(SoilState.LOCKED);
 
         Soil planted = farm.getSoil(3, 4);
         BasicCrop crop = new BasicCrop();
@@ -69,13 +71,30 @@ class FarmPersistenceIntegrationTest {
         crop.setPlantWorldTime(3L * 24 + 8);
         crop.setManualWaterCount(1);
         crop.setLastManualWaterGameDay(2);
+        crop.setFertilizerCount(2);
+        crop.setLastFertilizedGameDay(4);
+        crop.setDroughtCount(3);
+        crop.setRainCount(2);
+        crop.setGreenRainCount(1);
+        crop.setLastHydratedWorldTime(117);
+        crop.setDroughtStreak(2);
+        crop.setEventCount(4);
         planted.setCrop(crop);
         planted.setState(SoilState.PLANTED);
 
         // 装配层注册的回填钩子：落盘前把运行态写回 GameState
+        CropMemory memory = new CropMemory();
+        memory.setCropUuid(crop.getCropUuid());
+        memory.setCropType(crop.getCropType());
+        memory.setPlantWorldTime(crop.getPlantWorldTime());
+        memory.setFertilizerCount(2);
+        memory.setLastFertilizeGameDay(4);
+        state.getMemories().add(memory);
+
         manager.setBeforeSaveHook(() -> {
             FarmStateAdapter.capture(state, farm);
             state.setGameDay(5L);
+            state.setLastRealTime("2026-09-14T12:30:00");
         });
 
         manager.saveAndExit();
@@ -85,6 +104,11 @@ class FarmPersistenceIntegrationTest {
         assertTrue(restarted.hasSavedGame());
         GameState loaded = restarted.start();
         assertEquals(5L, loaded.getGameDay(), "游戏天数应随存档恢复");
+        assertEquals("2026-09-14T12:30:00", loaded.getLastRealTime(),
+                "last_real_time 必须跨退出重启恢复，供 GameClock 计算离线分钟");
+        assertEquals(1, loaded.getMemories().size());
+        assertEquals(4, loaded.getMemories().get(0).getLastFertilizeGameDay(),
+                "CropMemory 最近施肥日必须落库，否则重启后同日可重复施肥");
 
         Farm reloaded = new BasicFarm();
         FarmStateAdapter.restore(loaded, reloaded);
@@ -103,10 +127,22 @@ class FarmPersistenceIntegrationTest {
         assertEquals(80L, restoredCrop.getPlantWorldTime());
         assertEquals(1, restoredCrop.getManualWaterCount());
         assertEquals(2L, restoredCrop.getLastManualWaterGameDay());
+        assertEquals(2, restoredCrop.getFertilizerCount());
+        assertEquals(4L, restoredCrop.getLastFertilizedGameDay());
+        assertEquals(3, restoredCrop.getDroughtCount());
+        assertEquals(2, restoredCrop.getRainCount());
+        assertEquals(1, restoredCrop.getGreenRainCount());
+        assertEquals(117L, restoredCrop.getLastHydratedWorldTime());
+        assertEquals(2, restoredCrop.getDroughtStreak());
+        assertEquals(4, restoredCrop.getEventCount());
 
-        // 未操作的地块保持初始状态
-        assertEquals(SoilState.EMPTY, reloaded.getSoil(2, 3).getState());
+        // P3 LOCKED 状态必须跨重启保留，避免读档后凭空解锁。
+        assertEquals(SoilState.LOCKED, reloaded.getSoil(2, 3).getState());
         assertNull(reloaded.getSoil(2, 3).getCrop());
+
+        // 未操作的普通地块仍保持 EMPTY。
+        assertEquals(SoilState.EMPTY, reloaded.getSoil(2, 4).getState());
+        assertNull(reloaded.getSoil(2, 4).getCrop());
     }
 
     /**

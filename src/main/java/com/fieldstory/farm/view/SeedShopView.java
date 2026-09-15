@@ -28,16 +28,13 @@ public final class SeedShopView extends VBox {
         setPadding(new Insets(12));
         setAlignment(Pos.TOP_LEFT);
         setPrefWidth(320);
-        setStyle("-fx-background-color: #FFF3DD;"
-                + "-fx-background-radius: 12;"
-                + "-fx-border-color: #8B5E3C;"
-                + "-fx-border-radius: 12;"
-                + "-fx-border-width: 2;");
+        getStyleClass().addAll("panel", "shop-root");
+        UiTheme.apply(this);
 
         Label title = new Label("种子商店");
-        title.setStyle("-fx-text-fill: #493526; -fx-font-size: 18;");
-        goldLabel.setStyle("-fx-text-fill: #493526; -fx-font-size: 14;");
-        messageLabel.setStyle("-fx-text-fill: #493526; -fx-font-size: 12;");
+        title.getStyleClass().add("section-title");
+        goldLabel.getStyleClass().add("normal-text");
+        messageLabel.getStyleClass().add("hint-text");
 
         getChildren().addAll(title, goldLabel);
         for (CropType type : CropType.values()) {
@@ -58,10 +55,7 @@ public final class SeedShopView extends VBox {
 
         Button buy = new Button("购买");
         buy.setPrefSize(70, 36);
-        buy.setStyle("-fx-background-color: #A97850;"
-                + "-fx-background-radius: 10;"
-                + "-fx-text-fill: #FFF3DD;"
-                + "-fx-font-size: 14;");
+        buy.getStyleClass().add("primary-button");
         buy.setOnAction(e -> {
             PurchaseResult result = controller.buySeed(type, 1);
             messageLabel.setText(ShopController.messageFor(result, type));
@@ -69,6 +63,7 @@ public final class SeedShopView extends VBox {
         });
         HBox row = new HBox(6, name, price, count, buy);
         row.setAlignment(Pos.CENTER_LEFT);
+        row.getStyleClass().add("shop-row");
         return row;
     }
 

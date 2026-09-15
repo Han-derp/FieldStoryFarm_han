@@ -47,4 +47,16 @@ class ShowcaseViewTest {
         assertEquals("品质：传说", MemoryCardView.infoLine("品质", "传说"));
         assertEquals("种植时间：第3天 08:00", MemoryCardView.infoLine("种植时间", "第3天 08:00"));
     }
+
+    /** P4 展示台传奇专属插图路径固定，避免回退成普通成熟作物贴图。 */
+    @Test
+    void legendaryImagePathsAreStable() {
+        assertEquals("/assets/crops/legendary/golden_wheat.png",
+                LegendaryImageAssets.classpathFor(CropType.WHEAT));
+        assertEquals("/assets/crops/legendary/rainbow_corn.png",
+                LegendaryImageAssets.classpathFor(CropType.CORN));
+        assertEquals("/assets/crops/legendary/dragon_carrot.png",
+                LegendaryImageAssets.classpathFor(CropType.CARROT));
+    }
+
 }

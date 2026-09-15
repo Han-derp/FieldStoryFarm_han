@@ -2,14 +2,20 @@ package com.fieldstory.farm.controller;
 
 import com.fieldstory.farm.manager.SceneManager;
 import com.fieldstory.farm.model.Crop;
+import com.fieldstory.farm.model.CropMemory;
 import com.fieldstory.farm.model.CropType;
 import com.fieldstory.farm.model.Farm;
 import com.fieldstory.farm.model.GameClock;
 import com.fieldstory.farm.model.GrowthStage;
 import com.fieldstory.farm.model.Soil;
+import com.fieldstory.farm.model.item.Inventory;
+import com.fieldstory.farm.service.FertilizeResult;
+import com.fieldstory.farm.service.FertilizerService;
+import com.fieldstory.farm.service.AudioService;
 import com.fieldstory.farm.service.HarvestResult;
 import com.fieldstory.farm.service.HarvestService;
 import com.fieldstory.farm.service.LandService;
+import com.fieldstory.farm.service.MemoryService;
 import com.fieldstory.farm.service.PlantingResult;
 import com.fieldstory.farm.service.PlantingService;
 import com.fieldstory.farm.service.ReclaimResult;
@@ -22,6 +28,7 @@ import javafx.scene.control.Button;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * 农场视图控制器（A 模块 P0 视图层；脚手架 §七.4 controller 职责：
@@ -75,8 +82,29 @@ public class FarmViewController {
      */
     private final EconomyService economyService;
 
+    /** C P1：施肥服务；旧构造为 null 时隐藏施肥入口。 */
+    private final FertilizerService fertilizerService;
+
+    /** C P2：生命记忆；在线播种/浇水/施肥事实最终都落到这一个数据源。 */
+    private final MemoryService memoryService;
+
+    /** 玩家背包：施肥消耗与收获肥料奖励使用同一实例。 */
+    private final Inventory inventory;
+
+    /** P4 表现层音频；null 时完全静默，兼容旧测试构造。 */
+    private final AudioService audioService;
+
     /** 农场画布视图 */
     private final FarmView farmView;
+
+    /**
+     * LOCKED 地块点击事件出口。
+     *
+     * <p>A 只发出“玩家请求解锁这块地”的事件，不依赖 B 的 LandUnlockService，
+     * 不读取价格、不扣金币、不修改 LOCKED 状态。E 装配层负责把它接给
+     * B 的 LandUnlockController / LandUnlockPopupView。
+     */
+    private Consumer<Soil> lockedPlotClickHandler = soil -> { };
 
     /**
      * 装配视图、四个业务 Service（三个 A + 一个 C 收获）、D 的时钟与 B 的只读经济查询入口。
@@ -97,6 +125,43 @@ public class FarmViewController {
             HarvestService harvestService,
             GameClock gameClock,
             EconomyService economyService) {
+        this(farm, landService, plantingService, wateringService, harvestService,
+                gameClock, economyService, null, null, null, null);
+    }
+
+    /**
+     * C 完整接线构造：增加施肥、生命记忆和同一背包实例。
+     *
+     * <p>保留旧 7 参数构造用于既有单测/旧装配；生产 MainController 使用本构造。
+     */
+    public FarmViewController(
+            Farm farm,
+            LandService landService,
+            PlantingService plantingService,
+            WateringService wateringService,
+            HarvestService harvestService,
+            GameClock gameClock,
+            EconomyService economyService,
+            FertilizerService fertilizerService,
+            MemoryService memoryService,
+            Inventory inventory) {
+        this(farm, landService, plantingService, wateringService, harvestService, gameClock,
+                economyService, fertilizerService, memoryService, inventory, null);
+    }
+
+    /** P4 正式构造：只比 P3 多一个表现层 AudioService，不改变业务依赖。 */
+    public FarmViewController(
+            Farm farm,
+            LandService landService,
+            PlantingService plantingService,
+            WateringService wateringService,
+            HarvestService harvestService,
+            GameClock gameClock,
+            EconomyService economyService,
+            FertilizerService fertilizerService,
+            MemoryService memoryService,
+            Inventory inventory,
+            AudioService audioService) {
         this.farm = farm;
         this.landService = landService;
         this.plantingService = plantingService;
@@ -104,6 +169,10 @@ public class FarmViewController {
         this.harvestService = harvestService;
         this.gameClock = gameClock;
         this.economyService = economyService;
+        this.fertilizerService = fertilizerService;
+        this.memoryService = memoryService;
+        this.inventory = inventory;
+        this.audioService = audioService;
         this.farmView = new FarmView(farm);
         this.farmView.setOnTileSelected(this::onTileSelected);
     }
@@ -111,6 +180,15 @@ public class FarmViewController {
     /** 农场画布视图。 */
     public FarmView getView() {
         return farmView;
+    }
+
+    /**
+     * 注入 LOCKED 地块点击事件处理器。
+     *
+     * <p>这是 A → 外部的唯一土地解锁出口；null 恢复为空操作。
+     */
+    public void setOnLockedPlotClicked(Consumer<Soil> handler) {
+        this.lockedPlotClickHandler = handler == null ? soil -> { } : handler;
     }
 
     /**
@@ -128,8 +206,8 @@ public class FarmViewController {
      *
      * <p>EMPTY→开垦、TILLED→播种、PLANTED（未成熟）→浇水、
      * PLANTED 且作物 MATURE→收获、PLANTED 且作物 WITHERED→铲除
-     * （只给铲除，不给浇水/收获，验收 §五十四）；装饰区（null）与 LOCKED 无动作
-     * （P0 不产生 LOCKED，验收规范 §十四）。
+     * （只给铲除，不给浇水/收获，验收 §五十四）；LOCKED 只给 REQUEST_UNLOCK，
+     * 真正 LOCKED→EMPTY 由 B 模块完成；装饰区（null）无动作。
      *
      * @param soil 目标格土地（装饰区为 null）
      * @return 动作列表（0~1 个）
@@ -153,11 +231,18 @@ public class FarmViewController {
                     return List.of(FarmAction.HARVEST);
                 }
                 if (crop != null && crop.getGrowthStage() == GrowthStage.SEED) {
-                    // 规则：种子阶段不能浇水，不给死按钮
+                    // 规则：种子阶段不能浇水、不能施肥，不给死按钮。
                     return List.of();
                 }
-                return List.of(FarmAction.WATER);
+                if (crop != null
+                        && (crop.getGrowthStage() == GrowthStage.SPROUT
+                        || crop.getGrowthStage() == GrowthStage.GROWING)) {
+                    // C P1：SPROUT / GROWING 可施肥；与主动浇水并列显示。
+                    return List.of(FarmAction.WATER, FarmAction.FERTILIZE);
+                }
+                return crop == null ? List.of() : List.of(FarmAction.WATER);
             case LOCKED:
+                return List.of(FarmAction.REQUEST_UNLOCK);
             default:
                 return List.of();
         }
@@ -217,6 +302,25 @@ public class FarmViewController {
         }
     }
 
+    /** 纯函数：施肥结果码 → 用户提示文案。 */
+    public static String actionMessageFor(FertilizeResult result) {
+        switch (result) {
+            case SUCCESS:
+                return "施肥成功";
+            case NOT_ALLOWED_STAGE:
+                return "只有幼苗或成长阶段可以施肥";
+            case ALREADY_FERTILIZED_TODAY:
+                return "今天已经施过肥了";
+            case MAX_TIMES_PER_LIFE:
+                return "这株作物一生最多施肥3次";
+            case NOT_ENOUGH_FERTILIZER:
+                return "肥料不足";
+            case NO_CROP_OR_MEMORY:
+            default:
+                return "施肥失败";
+        }
+    }
+
     /**
      * 纯函数：收获结果码 → 用户提示文案
      * （C 模块 BasicHarvestService 结果码；设计文档 D13 文案由 Controller 映射）。
@@ -262,12 +366,26 @@ public class FarmViewController {
             return;
         }
         farmView.selectTile(soil);
-        List<FarmAction> actions = actionsFor(soil);
+        List<FarmAction> actions = availableActionsFor(soil);
         if (actions.isEmpty()) {
             farmView.hideMenu();
             return;
         }
         farmView.showMenuFor(soil, buildButtons(soil, actions));
+    }
+
+    /**
+     * 生产可用动作：理论状态机由 {@link #actionsFor(Soil)} 给出；
+     * 旧构造未装配 FertilizerService 时隐藏 FERTILIZE，保持向后兼容。
+     */
+    private List<FarmAction> availableActionsFor(Soil soil) {
+        List<FarmAction> actions = actionsFor(soil);
+        if (fertilizerService != null || !actions.contains(FarmAction.FERTILIZE)) {
+            return actions;
+        }
+        return actions.stream()
+                .filter(action -> action != FarmAction.FERTILIZE)
+                .toList();
     }
 
     /** 按动作生成菜单按钮（UI规范 §12；HARVEST 由 C 的 HarvestService 执行）。 */
@@ -282,7 +400,7 @@ public class FarmViewController {
     }
  /** 按当前土壤状态刷新菜单：无可用动作收起，有则原地重开（连续操作）。 */
     private void refreshMenu(Soil soil) {
-        List<FarmAction> actions = actionsFor(soil);
+        List<FarmAction> actions = availableActionsFor(soil);
         if (actions.isEmpty()) {
             farmView.hideMenu();
         } else {
@@ -298,6 +416,10 @@ public class FarmViewController {
                 return "播种";
             case WATER:
                 return "浇水";
+            case FERTILIZE:
+                return "施肥";
+            case REQUEST_UNLOCK:
+                return "解锁";
             case HARVEST:
                 return "收获";
             case CLEAR_WITHERED:
@@ -319,6 +441,12 @@ public class FarmViewController {
             case WATER:
                 water(soil);
                 break;
+            case FERTILIZE:
+                fertilize(soil);
+                break;
+            case REQUEST_UNLOCK:
+                requestUnlock(soil);
+                break;
             case HARVEST:
                 harvest(soil);
                 break;
@@ -330,12 +458,28 @@ public class FarmViewController {
         }
     }
 
+    /**
+     * LOCKED 点击出口：只通知外部，不执行 B 的解锁业务。
+     *
+     * <p>外部处理器返回后刷新当前格与菜单：若 B 已成功把 LOCKED→EMPTY，
+     * UI 会立即切换到“开垦”；若用户取消/金币不足，仍保持“解锁”。
+     */
+    private void requestUnlock(Soil soil) {
+        if (soil == null || soil.getState() != com.fieldstory.farm.model.SoilState.LOCKED) {
+            return;
+        }
+        lockedPlotClickHandler.accept(soil);
+        farmView.refreshTile(soil);
+        refreshMenu(soil);
+    }
+
     /** 开垦：EMPTY→TILLED（验收规范 §十五）。 */
     private void reclaim(Soil soil) {
         ReclaimResult result = landService.reclaim(soil);
         if (result == ReclaimResult.SUCCESS) {
             farmView.setCurrentGameDay(gameClock.getGameDay());
             farmView.refreshTile(soil);
+            farmView.animateReclaim(soil);
         } else {
             farmView.showTip(soil, actionMessageFor(result));
         }
@@ -363,9 +507,15 @@ public class FarmViewController {
     private void plant(Soil soil, CropType type) {
         PlantingResult result = plantingService.plant(soil, type);
         if (result == PlantingResult.SUCCESS) {
-           refreshMenu(soil);
+            if (memoryService != null && soil.getCrop() != null
+                    && memoryService.findMemory(soil.getCrop().getCropUuid()).isEmpty()) {
+                memoryService.createMemory(soil.getCrop());
+            }
+            refreshMenu(soil);
             farmView.setCurrentGameDay(gameClock.getGameDay());
             farmView.refreshTile(soil);
+            farmView.animatePlant(soil);
+            playSfx(AudioService.Sfx.PLANT);
         } else {
             farmView.showTip(soil, actionMessageFor(result));
         }
@@ -379,9 +529,47 @@ public class FarmViewController {
         }
         WateringResult result = wateringService.water(crop, gameClock.getGameDay());
         if (result == WateringResult.SUCCESS) {
+            if (memoryService != null) {
+                CropMemory memory = memoryService.findMemory(crop.getCropUuid())
+                        .orElseGet(() -> memoryService.createMemory(crop));
+                memoryService.recordManualWater(memory, gameClock.getGameDay());
+            }
             refreshMenu(soil);
             farmView.setCurrentGameDay(gameClock.getGameDay());
             farmView.refreshTile(soil);
+            farmView.animateWater(soil);
+            playSfx(AudioService.Sfx.WATER);
+        } else {
+            farmView.showTip(soil, actionMessageFor(result));
+        }
+    }
+
+    /**
+     * 施肥：仅 SPROUT / GROWING；每日一次、生命周期三次、消耗 1 肥料。
+     *
+     * <p>具体校验/扣库存/Memory 记录全部由 C.FertilizerService 执行，
+     * Controller 不复制业务规则。
+     */
+    private void fertilize(Soil soil) {
+        Crop crop = soil == null ? null : soil.getCrop();
+        if (crop == null || fertilizerService == null || memoryService == null) {
+            if (soil != null) {
+                farmView.showTip(soil, "施肥功能尚未装配");
+            }
+            return;
+        }
+
+        CropMemory memory = memoryService.findMemory(crop.getCropUuid())
+                .orElseGet(() -> memoryService.createMemory(crop));
+        FertilizeResult result = fertilizerService.fertilize(
+                crop, memory, inventory, gameClock.getGameDay());
+
+        if (result == FertilizeResult.SUCCESS) {
+            farmView.setCurrentGameDay(gameClock.getGameDay());
+            farmView.refreshTile(soil);
+            farmView.animateFertilize(soil);
+            playSfx(AudioService.Sfx.FERTILIZE);
+            refreshMenu(soil);
         } else {
             farmView.showTip(soil, actionMessageFor(result));
         }
@@ -396,6 +584,8 @@ public class FarmViewController {
         if (result == HarvestResult.SUCCESS) {
             farmView.setCurrentGameDay(gameClock.getGameDay());
             farmView.refreshTile(soil);
+            farmView.animateHarvest(soil);
+            playSfx(AudioService.Sfx.HARVEST);
             refreshMenu(soil);
         } else {
             farmView.showTip(soil, actionMessageFor(result));
@@ -412,5 +602,11 @@ public class FarmViewController {
         refreshMenu(soil);
         farmView.setCurrentGameDay(gameClock.getGameDay());
         farmView.refreshTile(soil);
+    }
+
+    private void playSfx(AudioService.Sfx sfx) {
+        if (audioService != null) {
+            audioService.playSfx(sfx);
+        }
     }
 }

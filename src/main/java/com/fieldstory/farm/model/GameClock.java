@@ -63,12 +63,27 @@ public interface GameClock {
     /**
      * 计算离线时长（现实世界分钟数，规则 §八/§九）。
      *
-     * <p>P0 阶段离线模拟不启用（验收规范 §10），本方法返回 0；
-     * P1 起由 {@code RealGameClock} 依据 {@code logoutRealTime} 计算。
+     * <p>无已保存现实时间基准时返回 0；正式运行由实现依据持久化的
+     * {@code logoutRealTime / last_real_time} 与 {@link #getRealTime()} 计算整现实分钟。
      *
      * @return 离线现实分钟数
      */
     long calculateOfflineDuration();
+
+    /**
+     * 获取上次真实存档/退出时间。新游戏或旧档没有记录时返回 {@code null}。
+     *
+     * <p>该值只用于 {@link #calculateOfflineDuration()} 的离线时长计算；
+     * 由 E 持久化层从 {@code world_state.last_real_time} 恢复，不参与游戏世界时间推进。
+     */
+    LocalDateTime getLastRealTime();
+
+    /**
+     * 恢复/更新上次真实存档时间。传 {@code null} 表示尚无离线计算基准。
+     *
+     * @param lastRealTime 上次真实存档/退出时间
+     */
+    void setLastRealTime(LocalDateTime lastRealTime);
 
     // ===== D 模块 P0 文档 §一 与验收规范 §41 所需的具体方法 =====
 

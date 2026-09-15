@@ -4,6 +4,7 @@ import com.fieldstory.farm.model.Crop;
 import com.fieldstory.farm.model.GrowthStage;
 import com.fieldstory.farm.service.GrowthRates;
 import com.fieldstory.farm.service.GrowthService;
+import com.fieldstory.farm.service.OperationRateResolver;
 import com.fieldstory.farm.service.WateringService;
 
 /**
@@ -36,13 +37,25 @@ public class BasicGrowthService implements GrowthService {
     /** 浇水服务：同层调用取浇水加成（A 模块设计文档 §8.3） */
     private final WateringService wateringService;
 
+    /** 可选的完整 OperationRate 解析器；生产装配用于接入 B Buff + C 施肥。 */
+    private final OperationRateResolver operationRateResolver;
+
     /**
      * 构造器注入浇水服务（A 模块设计文档 §8.3）。
      *
      * @param wateringService 浇水服务（提供浇水成长加成）
      */
     public BasicGrowthService(WateringService wateringService) {
+        this(wateringService, null);
+    }
+
+    /**
+     * 完整生产构造：A 不重算 B/C 规则，只消费装配层给出的 OperationRate。
+     */
+    public BasicGrowthService(WateringService wateringService,
+                              OperationRateResolver operationRateResolver) {
         this.wateringService = wateringService;
+        this.operationRateResolver = operationRateResolver;
     }
 
     @Override
@@ -70,8 +83,15 @@ public class BasicGrowthService implements GrowthService {
         double base = crop.getCropType().getBaseDailyProgress();
         // P2 公式（计划书 §5 六因子；验收规范 §四十九；D 模块 P2 文档 §二）：
         // Base × Days × WeatherRate × DecorationRate × EventRate × OperationRate；
-        // OperationRate = 1 + 浇水加成（维持 P1 内部口径，验收规范 §二十四）。
-        double operationRate = 1.0 + wateringService.calculateWaterGrowthBonus(crop);
+        // OperationRate = 1 + WaterBonus + FertilizerBonus。
+        // 生产路径由装配层解析 B 的 watering/fertilizer multiplier 与 C 的施肥运行态；
+        // 旧构造保持原 P1 浇水行为。
+        double operationRate = operationRateResolver == null
+                ? 1.0 + wateringService.calculateWaterGrowthBonus(crop)
+                : operationRateResolver.operationRate(crop);
+        if (operationRate < 0 || Double.isNaN(operationRate)) {
+            operationRate = 0.0;
+        }
         return base * elapsedGameDays * rates.weatherRate() * rates.decorationRate()
                 * rates.eventRate() * operationRate;
     }

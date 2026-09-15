@@ -19,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -52,6 +53,7 @@ class BasicWorldSimulationServiceTest {
         Soil soil = farm.getSoil(row, col);
         soil.setState(SoilState.PLANTED);
         Crop crop = new BasicCrop();
+        crop.setCropUuid(UUID.randomUUID());
         crop.setCropType(CropType.CORN);
         crop.setGrowthStage(stage);
         crop.setGrowthProgress(progress);
@@ -205,6 +207,27 @@ class BasicWorldSimulationServiceTest {
     }
 
     /**
+     * 第三轮事实桥：真正进入非零枯萎概率区间的作物 UUID 必须由世界引擎上报，
+     * Memory 层不能再复制 streak / 作物耐性 / Buff 概率公式。
+     */
+    @Test
+    void settlementReportsExactlyCropsThatEnteredWitherRisk() {
+        Farm farm = new BasicFarm();
+        Crop risky = plantOn(farm, 2, 2, GrowthStage.SPROUT, 30.0);
+        Crop safe = plantOn(farm, 2, 3, GrowthStage.SPROUT, 30.0);
+        risky.setDroughtStreak(1); // 日结记录 DROUGHT 后变 2，普通玉米进入 30% 风险
+        safe.setDroughtStreak(0);  // 日结后仅 1，无风险
+
+        DailySimulationResult result = simulation.settleDay(farm, new DaySettlementInput(
+                1, 24, WeatherType.DROUGHT, EventType.NONE,
+                10L, 20L, GrowthRates.P0, 1.0, List.of(0.99, 0.99)));
+
+        assertEquals(List.of(risky.getCropUuid()), result.witherRiskCropUuids());
+        assertEquals(10L, result.eventStartWorldTime());
+        assertEquals(20L, result.eventEndWorldTime());
+    }
+
+    /**
      * 掷骰列表取尽视为 1.0：⑤⑥ 后 streak=4（概率 1.0），rolls 为空仍必不枯萎
      * （异常输入不破坏状态）。
      */
@@ -219,6 +242,33 @@ class BasicWorldSimulationServiceTest {
 
         assertEquals(0, result.witheredCount(), "取尽视为 1.0，必不枯萎");
         assertEquals(GrowthStage.SPROUT, crop.getGrowthStage());
+    }
+
+    /**
+     * A/B 集成：同样的基础枯萎概率与 roll，下标 (2,2) 使用 1.0 会枯萎，
+     * (2,3) 使用 B 的 witherProbabilityMultiplier=0.7 后概率从 30% 降到 21%，
+     * roll=0.25 应存活。A 不识别“石灯笼”，只消费最终倍率。
+     */
+    @Test
+    void settleDayConsumesPerCropWitherProbabilityMultiplier() {
+        Farm farm = new BasicFarm();
+        Crop plain = plantOn(farm, 2, 2, GrowthStage.SPROUT, 30.0);
+        Crop protectedCrop = plantOn(farm, 2, 3, GrowthStage.SPROUT, 30.0);
+        plain.setDroughtStreak(1);
+        protectedCrop.setDroughtStreak(1);
+
+        DailySimulationResult result = simulation.settleDay(
+                farm,
+                new DaySettlementInput(
+                        1, 24, WeatherType.DROUGHT, EventType.NONE,
+                        GrowthRates.P0, 1.0, List.of(0.25, 0.25)),
+                (row, column, cropType) -> column == 3 ? 0.7 : 1.0);
+
+        assertEquals(1, result.witheredCount());
+        assertEquals(GrowthStage.WITHERED, plain.getGrowthStage(),
+                "30% 基础概率下 0.25 应触发枯萎");
+        assertEquals(GrowthStage.SPROUT, protectedCrop.getGrowthStage(),
+                "0.30 × 0.7 = 0.21，0.25 不应枯萎");
     }
 
     // ===== 5. 分段成长（验收 §八十八）=====
@@ -271,6 +321,26 @@ class BasicWorldSimulationServiceTest {
         assertEquals(100.0 / 3.0, normal.getGrowthProgress(), 1e-6);
         assertEquals(50.0, boosted.getGrowthProgress(), 1e-6,
                 "逐 Crop resolver 应覆盖 GrowthRates 中的单一 decorationRate");
+    }
+
+    /**
+     * A/B 集成：resolver 返回的 growthRate 已包含 Decoration + Set Growth Buff；
+     * A 只消费最终倍率，不解析装饰或套装。自然之息单独贡献 +8% 时，
+     * 24 小时玉米应按 1.08 倍成长。
+     */
+    @Test
+    void growSegmentConsumesDecorationAndSetGrowthRate() {
+        Farm farm = new BasicFarm();
+        Crop crop = plantOn(farm, 2, 2, GrowthStage.SEED, 0.0);
+
+        simulation.growSegment(
+                farm,
+                24.0,
+                GrowthRates.P0,
+                (row, column, cropType) -> 1.08);
+
+        assertEquals(100.0 / 3.0 * 1.08, crop.getGrowthProgress(), 1e-6,
+                "A 必须直接消费 B 汇总后的 Decoration/Set growthRate");
     }
 
     /**

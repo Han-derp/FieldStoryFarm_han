@@ -2,6 +2,7 @@ package com.fieldstory.farm.model.impl;
 
 import com.fieldstory.farm.model.GameClock;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 
 import static com.fieldstory.farm.util.GameConstants.DAY_END;
@@ -23,6 +24,9 @@ public class BasicGameClock implements GameClock {
 
     /** 累计总分钟数（从第 1 天 00:00 起）。 */
     private int totalMinutes;
+
+    /** 上次真实存档/退出时间；null 表示新档/旧档尚无离线计算基准。 */
+    private LocalDateTime lastRealTime;
 
     /**
      * 默认构造：初始化为 {@code DAY_START}（360 分钟，对应第 1 天 06:00，规则 §5.1）。
@@ -63,8 +67,21 @@ public class BasicGameClock implements GameClock {
 
     @Override
     public long calculateOfflineDuration() {
-        // P0 阶段离线模拟不启用（验收规范 §10），返回 0；P1 起由 RealGameClock 实现。
-        return 0L;
+        if (lastRealTime == null) {
+            return 0L;
+        }
+        long minutes = Duration.between(lastRealTime, getRealTime()).toMinutes();
+        return Math.max(0L, minutes);
+    }
+
+    @Override
+    public LocalDateTime getLastRealTime() {
+        return lastRealTime;
+    }
+
+    @Override
+    public void setLastRealTime(LocalDateTime lastRealTime) {
+        this.lastRealTime = lastRealTime;
     }
 
     @Override

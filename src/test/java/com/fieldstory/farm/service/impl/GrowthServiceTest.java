@@ -6,7 +6,6 @@ import com.fieldstory.farm.model.GrowthStage;
 import com.fieldstory.farm.model.impl.BasicCrop;
 import com.fieldstory.farm.service.GrowthRates;
 import com.fieldstory.farm.service.GrowthService;
-import com.fieldstory.farm.service.WateringService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
