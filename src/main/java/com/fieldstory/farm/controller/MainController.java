@@ -1,5 +1,6 @@
 package com.fieldstory.farm.controller;
 
+import com.fieldstory.farm.factory.GameClockFactory;
 import com.fieldstory.farm.manager.GameManager;
 import com.fieldstory.farm.manager.OfflineStartupStep;
 import com.fieldstory.farm.manager.SceneManager;
@@ -314,7 +315,7 @@ public class MainController {
         GraduationService graduationService = new BasicGraduationService(state, farmScoreService);
 
         Farm farm = new BasicFarm();
-        FarmGameModel model = new FarmGameModel();
+        FarmGameModel model = new FarmGameModel(GameClockFactory.createConfiguredClock());
         model.setFarm(farm);
         // P4 表现层单例：不进入任何领域规则或存档。
         AudioService audioService = BasicAudioService.shared();

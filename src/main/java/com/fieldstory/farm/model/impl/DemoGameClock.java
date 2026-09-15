@@ -12,8 +12,8 @@ import static com.fieldstory.farm.util.GameConstants.MINUTES_PER_TICK;
  * <p><b>用途：</b>仅用于开发调试与答辩演示，通过 ×12 时间倍率加速游戏进程
  * （规则 §九：小麦约 4 分钟成熟、玉米约 6 分钟、胡萝卜约 8 分钟）。
  *
- * <p><b>数值：</b>每次 {@link #tick()} 推进 {@code MINUTES_PER_TICK × 12 = 120} 游戏分钟
- * （即 2 游戏小时）。<b>不改变正式数值</b>：正式游戏仍为 1 现实分钟 = 1 游戏小时
+ * <p><b>数值：</b>每次 {@link #tick()} 推进 {@code MINUTES_PER_TICK × 12 = 12} 游戏分钟
+ * （即 12 游戏分钟）。<b>不改变正式数值</b>：正式游戏仍为 1 现实分钟 = 1 游戏小时
  * （规则 §九），本类只放大单次 tick 的推进量，供演示使用。
  *
  * <p><b>时间源统一：</b>继承 {@link BasicGameClock}，复用其全部时间换算逻辑，
@@ -41,7 +41,7 @@ public class DemoGameClock extends BasicGameClock {
     }
 
     /**
-     * 推进一个演示时间单位：{@code MINUTES_PER_TICK × 12 = 120} 游戏分钟。
+     * 推进一个演示时间单位：{@code MINUTES_PER_TICK × 12 = 12} 游戏分钟。
      *
      * <p>只负责累计总分钟数，不触发跨天结算逻辑（跨天结算由 Service 层负责，验收规范 §81）。
      */

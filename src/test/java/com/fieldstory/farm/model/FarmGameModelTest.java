@@ -31,7 +31,8 @@ class FarmGameModelTest {
     void tickDelegatesToGameClock() {
         FarmGameModel model = new FarmGameModel();
         model.tick();
-        assertEquals(370, model.getWorldTimeTotalMinutes());
+        assertEquals(361, model.getWorldTimeTotalMinutes(),
+                "正式时钟每 tick 只推进 1 游戏分钟");
     }
 
     @Test

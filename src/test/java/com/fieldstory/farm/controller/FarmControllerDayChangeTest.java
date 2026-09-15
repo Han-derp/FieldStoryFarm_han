@@ -12,7 +12,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.fieldstory.farm.util.GameConstants.DAY_START;
 import static com.fieldstory.farm.util.GameConstants.MINUTES_PER_DAY;
 import static com.fieldstory.farm.util.GameConstants.MINUTES_PER_TICK;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -74,11 +73,9 @@ class FarmControllerDayChangeTest {
             AtomicInteger count = new AtomicInteger();
             controller.setOnDayChanged(count::incrementAndGet);
 
-            // 144 次 tick × 10 分钟 = 1440 分钟 = 1 游戏日（规则 §5.1）
-            int ticksPerDay = MINUTES_PER_DAY / MINUTES_PER_TICK;
-            for (int i = 0; i < ticksPerDay; i++) {
-                controller.handleTick();
-            }
+            // 正式步长为 1 游戏分钟：把时钟放到日界前 1 分钟，下一 tick 精确跨日。
+            clock.setTotalMinutes(MINUTES_PER_DAY - MINUTES_PER_TICK);
+            controller.handleTick();
             return count.get();
         });
         assertEquals(1, fires, "跨过 1 个游戏日应恰好触发 1 次回调");
@@ -95,12 +92,9 @@ class FarmControllerDayChangeTest {
             AtomicInteger count = new AtomicInteger();
             controller.setOnDayChanged(count::incrementAndGet);
 
-            // 时钟从第 1 天 06:00（360 分钟）起步；推进到仍处于第 1 天为止
-            // （总分钟数 < 1440，即 tick 次数 < (1440 - 360) / 10 = 108）。
-            int ticksWithinDay = (MINUTES_PER_DAY - DAY_START) / MINUTES_PER_TICK - 1;
-            for (int i = 0; i < ticksWithinDay; i++) {
-                controller.handleTick();
-            }
+            // 日界前 2 分钟只推进 1 分钟，仍停留在同一天。
+            clock.setTotalMinutes(MINUTES_PER_DAY - 2 * MINUTES_PER_TICK);
+            controller.handleTick();
             return count.get();
         });
         assertEquals(0, fires, "未跨天不应触发回调");
@@ -117,10 +111,10 @@ class FarmControllerDayChangeTest {
             AtomicInteger count = new AtomicInteger();
             controller.setOnDayChanged(count::incrementAndGet);
 
-            int ticksPerDay = MINUTES_PER_DAY / MINUTES_PER_TICK;
-            for (int i = 0; i < ticksPerDay * 2; i++) {
-                controller.handleTick();
-            }
+            clock.setTotalMinutes(MINUTES_PER_DAY - MINUTES_PER_TICK);
+            controller.handleTick();
+            clock.setTotalMinutes(2 * MINUTES_PER_DAY - MINUTES_PER_TICK);
+            controller.handleTick();
             return count.get();
         });
         assertEquals(2, fires, "跨过 2 个游戏日应触发 2 次回调");
@@ -138,10 +132,8 @@ class FarmControllerDayChangeTest {
             controller.setOnDayChanged(count::incrementAndGet);
             controller.setOnDayChanged(null); // 应被忽略，保留原回调
 
-            int ticksPerDay = MINUTES_PER_DAY / MINUTES_PER_TICK;
-            for (int i = 0; i < ticksPerDay; i++) {
-                controller.handleTick();
-            }
+            clock.setTotalMinutes(MINUTES_PER_DAY - MINUTES_PER_TICK);
+            controller.handleTick();
             return count.get();
         });
         assertEquals(1, fires, "null 参数应被忽略，原回调仍生效");
@@ -157,10 +149,8 @@ class FarmControllerDayChangeTest {
             AtomicInteger count = new AtomicInteger();
             FarmController controller = new FarmController(model, view, count::incrementAndGet);
 
-            int ticksPerDay = MINUTES_PER_DAY / MINUTES_PER_TICK;
-            for (int i = 0; i < ticksPerDay; i++) {
-                controller.handleTick();
-            }
+            clock.setTotalMinutes(MINUTES_PER_DAY - MINUTES_PER_TICK);
+            controller.handleTick();
             return count.get();
         });
         assertEquals(1, fires, "构造器注入的回调应在跨天时触发");

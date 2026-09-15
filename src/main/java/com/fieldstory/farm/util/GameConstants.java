@@ -65,12 +65,12 @@ public final class GameConstants {
     public static final int CENTER_END_COL = 9;
 
     /**
-     * 单个地图格子的默认像素尺寸。
+     * 单个地图格子的正式像素尺寸。
      *
-     * 属于当前P0界面基础布局参数。
-     * 后续统一UI时如果调整，应由全组统一修改。
+     * UI 规范固定为 44×44；12×12 地图总尺寸因此为 528×528。
+     * FarmView 与所有外围装饰坐标都应服从这一正式值。
      */
-    public static final int TILE_SIZE = 64;
+    public static final int TILE_SIZE = 44;
 
 
     // =========================================================
@@ -78,12 +78,22 @@ public final class GameConstants {
     // =========================================================
 
     /**
-     * 每次基础游戏时钟tick推进的游戏分钟数。
+     * 正式在线主循环的现实秒间隔。
      *
-     * 当前D模块P0设计约定：
-     * 每次tick推进10游戏分钟。
+     * 固定每 1 现实秒触发一次 tick；配合 {@link #MINUTES_PER_TICK}=1，
+     * 得到 60 现实秒 = 60 游戏分钟 = 1 游戏小时。
      */
-    public static final int MINUTES_PER_TICK = 10;
+    public static final int REAL_SECONDS_PER_TICK = 1;
+
+    /**
+     * 每次正式在线时钟 tick 推进的游戏分钟数。
+     *
+     * FarmController 每 1 现实秒 tick 一次，因此这里必须为 1：
+     * 60 现实秒 = 60 游戏分钟 = 1 游戏小时，严格满足
+     * “1 现实分钟 = 1 游戏小时”的正式规则。
+     * DemoGameClock 仅在答辩/开发模式下额外乘以 12。
+     */
+    public static final int MINUTES_PER_TICK = 1;
 
     /**
      * 一个游戏日包含的游戏分钟数。
@@ -110,7 +120,7 @@ public final class GameConstants {
      * 每次基础游戏时钟tick推进的游戏天数。
      *
      * 由 {@link #MINUTES_PER_TICK} ÷ {@link #MINUTES_PER_DAY} 折算：
-     * 10 ÷ 1440，供主循环协调 GrowthService 时计算经过游戏天数
+     * 1 ÷ 1440，供主循环协调 GrowthService 时计算经过游戏天数
      * （验收规范 §二十五：必须支持非整日成长）。
      */
     public static final double GAME_DAYS_PER_TICK =

@@ -25,9 +25,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 
-import static com.fieldstory.farm.util.GameConstants.EVENT_RAINBOW_EVENT_RATE;
-import static com.fieldstory.farm.util.GameConstants.GAME_DAYS_PER_TICK;
-import static com.fieldstory.farm.util.GameConstants.WEATHER_RATE_P0;
+import static com.fieldstory.farm.util.GameConstants.*;
 
 /**
  * 农场主循环控制器。
@@ -76,8 +74,8 @@ public class FarmController {
     /** 每日日结摘要事实出口：供 Memory/日志/UI 薄桥接消费。 */
     private Consumer<DailySimulationResult> onDaySettled = result -> { };
 
-    /** 上一次观察到的游戏日；-1 表示尚未初始化。 */
-    private int lastGameDay = -1;
+    /** 上一次观察到的游戏日；构造时以当前 GameClock 游戏日为基线。 */
+    private int lastGameDay;
 
     /** 兼容早期装配：只推进时间，不执行正式世界模拟。 */
     public FarmController(FarmGameModel model, StatusView statusView) {
@@ -107,6 +105,7 @@ public class FarmController {
         this.worldSimulationService = null;
         this.decorationRateResolver = null;
         this.witherProbabilityMultiplierResolver = null;
+        this.lastGameDay = model.getGameClock().getGameDay();
         this.gameLoopTimeline = initGameLoop();
     }
 
@@ -132,11 +131,12 @@ public class FarmController {
                 worldSimulationService, "正式世界模拟服务不能为空");
         this.decorationRateResolver = decorationRateResolver;
         this.witherProbabilityMultiplierResolver = witherProbabilityMultiplierResolver;
+        this.lastGameDay = model.getGameClock().getGameDay();
         this.gameLoopTimeline = initGameLoop();
     }
 
     private Timeline initGameLoop() {
-        Timeline timeline = new Timeline(new KeyFrame(Duration.seconds(1), e -> handleTick()));
+        Timeline timeline = new Timeline(new KeyFrame(Duration.seconds(REAL_SECONDS_PER_TICK), e -> handleTick()));
         timeline.setCycleCount(Timeline.INDEFINITE);
         return timeline;
     }

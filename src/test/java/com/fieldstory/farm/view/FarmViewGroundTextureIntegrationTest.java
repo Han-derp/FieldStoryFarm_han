@@ -202,8 +202,7 @@ class FarmViewGroundTextureIntegrationTest {
 
             ImageView wet = groundAt(view, 2, 2);
             // P4 最终视觉方案：湿地与干地复用同一块干净土壤内格，
-            // 湿润差异由 FarmView 的 ColorAdjust 冷暗效果表达，
-            // 避免旧 wet frame 在 8x8 农田中形成突兀深色块。
+            // 湿润差异由 FarmView 的 ColorAdjust 冷暗效果表达。
             assertViewport(wet, 80, 16);
             assertEquals(42, wet.getFitWidth(), 0.0);
             assertEquals(42, wet.getFitHeight(), 0.0);

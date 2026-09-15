@@ -7,9 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * P1 DemoGameClock 测试（D 模块 P1 文档 §6、规则文档 §九）。
- *
- * <p>覆盖：每次 tick 推进 120 游戏分钟（MINUTES_PER_TICK × 12）、跨日、构造器边界。
+ * DemoGameClock 测试：正式基础步长为 1 游戏分钟，Demo 仅额外 ×12。
  */
 class DemoGameClockTest {
 
@@ -22,21 +20,31 @@ class DemoGameClockTest {
     }
 
     @Test
-    void tickAdvances120Minutes() {
+    void tickAdvancesTwelveGameMinutes() {
         GameClock clock = new DemoGameClock();
         clock.tick();
-        assertEquals(480, clock.getTotalMinutes(), "每次 tick 应推进 120 分钟（10 × 12）");
-        assertEquals("08:00", clock.getTimeString());
+        assertEquals(372, clock.getTotalMinutes(), "Demo 每次 1 秒 tick 应推进 12 游戏分钟（1 × 12）");
+        assertEquals("06:12", clock.getTimeString());
     }
 
     @Test
-    void twelveTicksCrossOneDay() {
+    void fiveDemoTicksAdvanceOneGameHour() {
         GameClock clock = new DemoGameClock();
-        for (int i = 0; i < 12; i++) {
+        for (int i = 0; i < 5; i++) {
             clock.tick();
         }
-        assertEquals(360 + 12 * 120, clock.getTotalMinutes());
-        assertEquals(2, clock.getGameDay(), "12 次 tick（1440 分钟）应跨 1 天");
+        assertEquals(420, clock.getTotalMinutes());
+        assertEquals("07:00", clock.getTimeString(), "5 次 Demo tick = 60 游戏分钟");
+    }
+
+    @Test
+    void oneHundredTwentyTicksAdvanceOneGameDay() {
+        GameClock clock = new DemoGameClock();
+        for (int i = 0; i < 120; i++) {
+            clock.tick();
+        }
+        assertEquals(360 + 1440, clock.getTotalMinutes());
+        assertEquals(2, clock.getGameDay(), "120 次 Demo tick（1440 游戏分钟）应跨 1 天");
         assertEquals("06:00", clock.getTimeString());
     }
 

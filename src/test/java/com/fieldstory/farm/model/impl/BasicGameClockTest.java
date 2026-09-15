@@ -30,20 +30,20 @@ class BasicGameClockTest {
     }
 
     @Test
-    void tick24TimesAdvancesToTenAm() {
+    void tickSixtyTimesAdvancesOneGameHour() {
         GameClock clock = new BasicGameClock();
-        for (int i = 0; i < 24; i++) {
+        for (int i = 0; i < 60; i++) {
             clock.tick();
         }
-        assertEquals(600, clock.getTotalMinutes());
-        assertEquals("10:00", clock.getTimeString());
+        assertEquals(420, clock.getTotalMinutes());
+        assertEquals("07:00", clock.getTimeString());
         assertEquals(1, clock.getGameDay());
     }
 
     @Test
-    void tick144TimesCrossesOneDay() {
+    void tick1440TimesCrossesOneDay() {
         GameClock clock = new BasicGameClock();
-        for (int i = 0; i < 144; i++) {
+        for (int i = 0; i < 1440; i++) {
             clock.tick();
         }
         assertEquals(1800, clock.getTotalMinutes());
@@ -85,8 +85,8 @@ class BasicGameClockTest {
     void advanceIsEquivalentToTick() {
         GameClock clock = new BasicGameClock();
         clock.advance();
-        assertEquals(370, clock.getTotalMinutes());
-        assertEquals("06:10", clock.getTimeString());
+        assertEquals(361, clock.getTotalMinutes());
+        assertEquals("06:01", clock.getTimeString());
     }
 
     @Test

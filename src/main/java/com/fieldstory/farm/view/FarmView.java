@@ -1,5 +1,6 @@
 package com.fieldstory.farm.view;
 
+import com.fieldstory.farm.util.GameConstants;
 import com.fieldstory.farm.model.Crop;
 import com.fieldstory.farm.model.Farm;
 import com.fieldstory.farm.model.FarmPlot;
@@ -54,7 +55,7 @@ public class FarmView extends Pane {
     public static final int MAP_SIZE = 12;
 
     /** 单格像素：44×44（UI规范 §6.1） */
-    public static final int TILE_SIZE = 44;
+    public static final int TILE_SIZE = GameConstants.TILE_SIZE;
 
     /** 画布总像素：12 × 44 = 528（UI规范 §6.1） */
     public static final int MAP_PX = MAP_SIZE * TILE_SIZE;

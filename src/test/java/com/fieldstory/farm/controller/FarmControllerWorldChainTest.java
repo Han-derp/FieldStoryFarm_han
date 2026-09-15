@@ -68,7 +68,7 @@ class FarmControllerWorldChainTest {
     @Test
     void productionPathUsesWorldSimulationAndPublishesFacts() throws InterruptedException {
         Snapshot snapshot = onFxThread(() -> {
-            // 让下一次 10 分钟 tick 恰好跨过第 1 天 00:00 边界。
+            // 让下一次 1 分钟正式 tick 恰好跨过第 1 天 00:00 边界。
             BasicGameClock clock = new BasicGameClock(MINUTES_PER_DAY - MINUTES_PER_TICK);
             FarmGameModel model = new FarmGameModel(clock);
             model.setFarm(new BasicFarm());

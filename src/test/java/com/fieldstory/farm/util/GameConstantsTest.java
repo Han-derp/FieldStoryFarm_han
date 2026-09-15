@@ -52,13 +52,23 @@ class GameConstantsTest {
                 9,
                 GameConstants.CENTER_END_COL
         );
+
+        assertEquals(
+                44,
+                GameConstants.TILE_SIZE
+        );
     }
 
     @Test
     void shouldProvideCorrectTimeConstants() {
 
         assertEquals(
-                10,
+                1,
+                GameConstants.REAL_SECONDS_PER_TICK
+        );
+
+        assertEquals(
+                1,
                 GameConstants.MINUTES_PER_TICK
         );
 

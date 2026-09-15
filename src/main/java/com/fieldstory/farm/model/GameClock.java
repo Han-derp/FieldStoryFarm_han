@@ -54,7 +54,7 @@ public interface GameClock {
     int getGameHour();
 
     /**
-     * 推进一个时间单位（{@code MINUTES_PER_TICK} 分钟，规则 §八）。
+     * 推进一个正式在线时间单位（当前为 1 游戏分钟，规则 §八/§九）。
      *
      * <p>与 {@link #tick()} 等价，为甲文档规定的命名。
      */
@@ -116,7 +116,7 @@ public interface GameClock {
     boolean isDaytime();
 
     /**
-     * 推进一个时间单位（{@code MINUTES_PER_TICK} 分钟）。
+     * 推进一个正式在线时间单位（当前为 1 游戏分钟）。
      *
      * <p>只负责累计总分钟数，不触发跨天结算逻辑（跨天结算由 Service 层负责，验收规范 §81）。
      */
